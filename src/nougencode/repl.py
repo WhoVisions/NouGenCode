@@ -57,6 +57,7 @@ class ReplSession:
             f"  * `/skill <name>` : View full instructions for a skill\n"
             f"  * `/create-skill <name>` : Create a new canonical SKILL.md package\n"
             f"  * `/recurse` : Discover & recurse edge tools into skills\n"
+            f"  * `/flow <lyrics>` : Analyze rap cadence, metric subdivision, & breath architecture\n"
             f"  * `/verbs` : View 11-verb cognitive instruction set\n"
             f"  * `/recall <query>` : Search 9-DB NouGenShards memory substrate\n"
             f"  * `/ctx <query>` : Search NouGen session context & tool events\n"
@@ -191,6 +192,36 @@ class ReplSession:
                         self.console.print(f"[bold green]✔ Successfully recursed '{tname}' into skill:[/] [cyan]{res.name}[/]")
                     else:
                         self.console.print(f"[yellow]Could not recurse '{tname}'. Run /recurse to view valid tools.[/]")
+                    continue
+
+                if user_input.startswith("/flow"):
+                    from .flow_craft import FlowCraftEngine
+                    lyrics = user_input[5:].strip()
+                    if not lyrics:
+                        lyrics = self.prompt_session.prompt("Enter verse lyrics to analyze: ").strip()
+                    if not lyrics:
+                        self.console.print("[yellow]No lyrics provided for flow analysis.[/]")
+                        continue
+                    
+                    engine = FlowCraftEngine(default_bpm=92)
+                    res = engine.analyze_bars(lyrics)
+                    table = Table(title=f"Flow Craft & Delivery Analysis (BPM: {res.bpm})", header_style="bold green")
+                    table.add_column("Metric", style="bold cyan")
+                    table.add_column("Value", style="yellow")
+                    table.add_row("Total Bars", str(res.total_bars))
+                    table.add_row("Dominant Subdivision", res.dominant_subdivision)
+                    table.add_row("Pocket Score", f"{res.pocket_score * 100:.1f}%")
+                    table.add_row("Breath Viability", f"{res.breath_viability * 100:.1f}%")
+                    table.add_row("Multisyllabic Density", f"{res.multisyllabic_density} per bar")
+                    table.add_row("Flow Switches", str(len(res.flow_switches)))
+                    self.console.print(table)
+
+                    if res.diagnostics:
+                        for d in res.diagnostics:
+                            self.console.print(f"[yellow]⚠ {d}[/]")
+
+                    markup = engine.suggest_delivery_markup(lyrics)
+                    self.console.print(Panel(markup, title="Performance & Breath Markup", border_style="cyan"))
                     continue
 
                 if user_input == "/verbs":
