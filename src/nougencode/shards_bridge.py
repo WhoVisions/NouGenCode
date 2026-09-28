@@ -1,25 +1,95 @@
 """Direct filesystem bridge to the canonical 9-DB NouGenShards memory substrate.
 
-Provides native zero-overhead FTS5 search, locator parsing (node:db#id),
-and shard capture into C:\\Users\\super\\.nougen\\shards.
+Provides native zero-overhead FTS5 search, canonical locator parsing (node:db#id),
+and auto-discovery of the user's canonical shards grid across Outpost and ~/.nougen.
 """
 
 from __future__ import annotations
 
-import json
+import os
+import socket
 from pathlib import Path
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-SHARDS_DIR = Path.home() / ".nougen" / "shards"
 NUM_DBS = 9
 
 
-class ShardsBridge:
-    """Interacts directly with the local 9-DB NouGenShards grid without external dependencies."""
+def detect_node_name() -> str:
+    """Resolves the current machine locator name (WhoArt, blade, etc.)."""
+    for var in ("NOUGEN_NODE", "NOUGEN_NODE_NAME", "NOUGEN_MACHINE"):
+        val = os.environ.get(var, "").strip()
+        if val:
+            return val
+    try:
+        return socket.gethostname().split(".")[0] or "unknown"
+    except Exception:
+        return "unknown"
 
-    def __init__(self, shards_dir: Path = SHARDS_DIR) -> None:
-        self.shards_dir = shards_dir
+
+def resolve_canonical_shards_dir() -> Path:
+    """Discovers and hooks into the user's canonical 9-DB NouGenShards grid.
+
+    Priority order:
+    1. Explicit NOUGEN_VAULT_DIR or NOUGEN_SHARDS_DIR environment variable
+    2. Canonical authority: ~/.nougen/shards (C:\\Users\\super\\.nougen\\shards)
+    3. User profile .nougen/shards fallback
+    4. Repo-adjacent .vault fallback (if allowed)
+    """
+    explicit = os.environ.get("NOUGEN_VAULT_DIR") or os.environ.get("NOUGEN_SHARDS_DIR")
+    if explicit:
+        p = Path(explicit).expanduser().resolve()
+        if p.is_dir():
+            return p
+
+    # Canonical persistent local authority
+    canonical = (Path.home() / ".nougen" / "shards").resolve()
+    if canonical.is_dir():
+        return canonical
+
+    # Alternative check on Windows user profiles
+    win_profile = os.environ.get("USERPROFILE")
+    if win_profile:
+        alt_canonical = (Path(win_profile) / ".nougen" / "shards").resolve()
+        if alt_canonical.is_dir():
+            return alt_canonical
+
+    return canonical
+
+
+class ShardsBridge:
+    """Interacts directly with the user's canonical 9-DB NouGenShards grid."""
+
+    def __init__(self, shards_dir: Optional[Path] = None) -> None:
+        self.shards_dir = (shards_dir or resolve_canonical_shards_dir()).resolve()
+        self.node_name = detect_node_name()
+
+    @property
+    def is_connected(self) -> bool:
+        """Checks if at least one shard database in the grid is active on disk."""
+        if not self.shards_dir.exists():
+            return False
+        return any((self.shards_dir / f"nougen_shards_{i}.db").exists() for i in range(1, NUM_DBS + 1))
+
+    def get_grid_stats(self) -> Dict[str, Any]:
+        """Returns discovery information and database health across the 9-DB grid."""
+        active_dbs = []
+        total_size = 0
+        for i in range(1, NUM_DBS + 1):
+            db_path = self.shards_dir / f"nougen_shards_{i}.db"
+            if db_path.exists():
+                size = db_path.stat().st_size
+                total_size += size
+                active_dbs.append({"db": i, "path": str(db_path), "size_mb": round(size / (1024 * 1024), 2)})
+
+        return {
+            "canonical_root": str(self.shards_dir),
+            "node": self.node_name,
+            "connected": self.is_connected,
+            "active_databases": len(active_dbs),
+            "total_size_mb": round(total_size / (1024 * 1024), 2),
+            "databases": active_dbs,
+        }
 
     def search_shards(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Multi-DB FTS5 search across all active nougen_shards_*.db files."""
@@ -52,7 +122,7 @@ class ShardsBridge:
                     )
                     for row in cur.fetchall():
                         item = dict(row)
-                        item["locator"] = f"{i}#{item['id']}"
+                        item["locator"] = f"{self.node_name}:{i}#{item['id']}"
                         results.append(item)
             except Exception:
                 continue
@@ -77,7 +147,7 @@ class ShardsBridge:
                 row = cur.fetchone()
                 if row:
                     res = dict(row)
-                    res["locator"] = f"{db_index}#{shard_id}"
+                    res["locator"] = f"{self.node_name}:{db_index}#{shard_id}"
                     return res
         except Exception:
             return None
