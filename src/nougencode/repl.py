@@ -22,6 +22,7 @@ from .model_runner import ModelRunner
 from .shard_recorder import ShardRecorder
 from .shards_bridge import ShardsBridge
 from .skills_engine import SkillRegistry, VERBS
+from .recurse_engine import RecurseEngine
 from .models import ScanSummary
 
 
@@ -38,6 +39,7 @@ class ReplSession:
         self.runner = ModelRunner()
         self.shards_bridge = ShardsBridge()
         self.skill_registry = SkillRegistry()
+        self.recurse_engine = RecurseEngine(self.root_dir / "skills")
         self.history: List[Dict[str, str]] = []
         self.prompt_session = PromptSession(history=InMemoryHistory())
 
@@ -54,6 +56,7 @@ class ReplSession:
             f"  * `/skills` : List discovered fleet skills\n"
             f"  * `/skill <name>` : View full instructions for a skill\n"
             f"  * `/create-skill <name>` : Create a new canonical SKILL.md package\n"
+            f"  * `/recurse` : Discover & recurse edge tools into skills\n"
             f"  * `/verbs` : View 11-verb cognitive instruction set\n"
             f"  * `/recall <query>` : Search 9-DB NouGenShards memory substrate\n"
             f"  * `/ctx <query>` : Search NouGen session context & tool events\n"
@@ -163,6 +166,31 @@ class ReplSession:
                     self.console.print(
                         f"[bold green]✔ Skill '{new_skill.name}' created at:[/] [cyan]{new_skill.path}[/]"
                     )
+                    continue
+
+                if user_input == "/recurse":
+                    tools = self.recurse_engine.discover_tools()
+                    if not tools:
+                        self.console.print("[yellow]No edge tools discovered to recurse.[/]")
+                    else:
+                        table = Table(title="Discovered Edge Tools (Available to Recurse)", header_style="bold green")
+                        table.add_column("Tool", style="bold cyan")
+                        table.add_column("Lines", style="yellow")
+                        table.add_column("Summary", style="white")
+                        for t in tools:
+                            table.add_row(t["name"], str(t["lines"]), t["doc"][:80])
+                        self.console.print(table)
+                        self.console.print("[dim]Run /recurse <tool_name> to compile an edge tool into a clean skill package.[/]")
+                    continue
+
+                if user_input.startswith("/recurse "):
+                    tname = user_input[9:].strip()
+                    res = self.recurse_engine.recurse_as_skill(tname)
+                    if res:
+                        self.skill_registry.reload()
+                        self.console.print(f"[bold green]✔ Successfully recursed '{tname}' into skill:[/] [cyan]{res.name}[/]")
+                    else:
+                        self.console.print(f"[yellow]Could not recurse '{tname}'. Run /recurse to view valid tools.[/]")
                     continue
 
                 if user_input == "/verbs":
