@@ -19,7 +19,7 @@ def main() -> int:
         description="NouGenCode: Fleet AST code cleaner, dead code scanner, and bloat sweeper.",
     )
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
-    parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive Claude Code-style terminal session")
+    parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
     parser.add_argument("--save-shard", action="store_true", help="Record scan receipt into NouGen shards")
     parser.add_argument("--no-ast", action="store_true", help="Skip AST deadcode scanner")
     parser.add_argument("--no-orphans", action="store_true", help="Skip orphan root script scanner")

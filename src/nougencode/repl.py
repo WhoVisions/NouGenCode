@@ -1,4 +1,4 @@
-"""Interactive Claude Code-style terminal REPL interface for NouGenCode."""
+"""Interactive autonomous terminal REPL interface for NouGenCode."""
 
 import os
 import sys
