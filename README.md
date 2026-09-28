@@ -1,8 +1,13 @@
 # ⚡ NouGenCode
 
-**NouGenCode** is the NouGen fleet AST code cleaner, dead code scanner, and bloat sweeper.
+**NouGenCode** is the NouGen fleet AST code cleaner, dead code scanner, and bloat sweeper with native 99% Context Mode guardrails and canonical 9-DB NouGenShards integration.
 
 ---
+
+## 🔒 Branch & Security Policy
+* **Protected Branch**: `main` (Direct pushes blocked; pull request review required).
+* **Zero Path Leaks**: Dynamic discovery only (`~/.nougen/shards`, `~/.nougen/context`). No hardcoded paths.
+
 
 ## 🎯 Purpose & Scope
 
