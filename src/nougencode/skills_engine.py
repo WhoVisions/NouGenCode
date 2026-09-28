@@ -93,6 +93,7 @@ class SkillRegistry:
         # 2. User home config skills
         home = Path.home()
         for cand in [
+            home / ".antigravity" / "skills",
             home / ".gemini" / "config" / "skills",
             home / ".nougen" / "skills",
             Path.cwd() / "skills",
