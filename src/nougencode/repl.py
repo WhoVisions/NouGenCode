@@ -42,11 +42,13 @@ class ReplSession:
             f"# ⚡ NouGenCode (Interactive Terminal Agent)\n\n"
             f"* **Directory**: `{self.root_dir}`\n"
             f"* **Model**: `{self.runner.model_name}` (Ollama Local)\n"
+            f"* **Context Mode**: `ENFORCED (99% Rule)` -> `~/.nougen/context/session.db`\n"
             f"* **Commands**:\n"
             f"  * `/scan` : Run AST deadcode, orphan, and dependency bloat scan\n"
-            f"  * `/view <file>` : View file lines\n"
+            f"  * `/ctx <query>` : Search NouGen session context & full event outputs\n"
+            f"  * `/view <file>` : View file lines (context-clamped)\n"
             f"  * `/grep <pattern>` : Deep search codebase\n"
-            f"  * `/bash <cmd>` : Execute shell command\n"
+            f"  * `/bash <cmd>` : Execute shell command (context-guarded)\n"
             f"  * `/shard` : Persist recent scan results into NouGen memory\n"
             f"  * `/help` : List commands\n"
             f"  * `/exit` or `Ctrl+C` : Exit session\n"
@@ -115,6 +117,27 @@ class ReplSession:
                     target = user_input[6:].strip()
                     res = self.tools.view_file(target)
                     self.console.print(Panel(res, title=f"File: {target}", border_style="blue"))
+                    continue
+
+                if user_input.startswith("/ctx"):
+                    query = user_input[4:].strip()
+                    if not query:
+                        events = self.tools.context_gate.search_context("*", limit=5)
+                    else:
+                        events = self.tools.context_gate.search_context(query, limit=5)
+                    if not events:
+                        self.console.print(f"[yellow]No context events matching '{query or '*'}'[/]")
+                    else:
+                        for ev in events:
+                            self.console.print(
+                                Panel(
+                                    f"[bold cyan]Timestamp:[/] {ev['timestamp']}\n"
+                                    f"[bold yellow]Type:[/] {ev['type']}\n\n"
+                                    f"{ev['content'][:500]}...",
+                                    title=f"Context Event #{ev['id']}",
+                                    border_style="magenta",
+                                )
+                            )
                     continue
 
                 if user_input.startswith("/grep "):

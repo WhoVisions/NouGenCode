@@ -5,12 +5,17 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .context_gate import ContextGate
+
 
 class ToolExecutor:
-    """Provides file inspection, editing, terminal bash, and search capabilities."""
+    """Provides file inspection, editing, terminal bash, and search capabilities.
+    All outputs are clamped and backed by NouGen Context Mode (99% rule).
+    """
 
     def __init__(self, root_dir: Path) -> None:
         self.root_dir = root_dir.resolve()
+        self.context_gate = ContextGate()
 
     def view_file(self, file_path: str, max_lines: int = 150) -> str:
         target = (self.root_dir / file_path).resolve()
@@ -19,13 +24,9 @@ class ToolExecutor:
         if not target.is_file():
             return f"Error: '{file_path}' is a directory."
         try:
-            lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
-            total = len(lines)
-            sliced = lines[:max_lines]
-            res = "\n".join(f"{i+1:4d} | {line}" for i, line in enumerate(sliced))
-            if total > max_lines:
-                res += f"\n... [{total - max_lines} more lines truncated]"
-            return res
+            raw = target.read_text(encoding="utf-8", errors="replace")
+            # Always pass through Context Gate first to protect context
+            return self.context_gate.clamp_for_llm(raw, max_lines=max_lines, event_type=f"view_file:{file_path}")
         except Exception as e:
             return f"Error reading file: {e}"
 
@@ -34,6 +35,7 @@ class ToolExecutor:
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
+            self.context_gate.log_event(f"write_file:{file_path}", content, {"lines": len(content.splitlines())})
             return f"Successfully wrote {len(content.splitlines())} lines to {file_path}"
         except Exception as e:
             return f"Error writing file: {e}"
@@ -50,7 +52,9 @@ class ToolExecutor:
             out = res.stdout
             if res.stderr:
                 out += f"\nSTDERR:\n{res.stderr}"
-            return out.strip() if out else f"(Process exited with returncode {res.returncode})"
+            raw = out.strip() if out else f"(Process exited with returncode {res.returncode})"
+            # 99% Rule: Route bash outputs through Context Gate
+            return self.context_gate.clamp_for_llm(raw, max_lines=20, event_type=f"bash:{command[:30]}")
         except subprocess.TimeoutExpired:
             return "Error: Command timed out after 30 seconds."
         except Exception as e:
