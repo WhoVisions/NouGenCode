@@ -95,10 +95,16 @@ class ShardsBridge:
         """Multi-DB FTS5 search across all active nougen_shards_*.db files."""
         results: List[Dict[str, Any]] = []
 
-        # Sanitize query for FTS5
-        clean_query = query.replace('"', '""').strip()
-        if not clean_query:
+        raw_query = query.strip()
+        if not raw_query:
             return results
+
+        # Format query for trigram FTS5 (phrase quoting helps exact match in trigrams)
+        clean_query = raw_query.replace('"', '""')
+        query_candidates = [
+            clean_query,
+            f'"{clean_query}"' if not clean_query.startswith('"') else clean_query,
+        ]
 
         for i in range(1, NUM_DBS + 1):
             db_path = self.shards_dir / f"nougen_shards_{i}.db"
@@ -109,21 +115,29 @@ class ShardsBridge:
                 with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5.0) as conn:
                     conn.row_factory = sqlite3.Row
                     cur = conn.cursor()
-                    cur.execute(
-                        """
-                        SELECT s.id, s.title, s.content, s.tags, s.domain_key, s.utility_score
-                        FROM shards s
-                        JOIN shards_fts fts ON s.id = fts.rowid
-                        WHERE shards_fts MATCH ?
-                        ORDER BY rank
-                        LIMIT ?
-                        """,
-                        (clean_query, limit),
-                    )
-                    for row in cur.fetchall():
-                        item = dict(row)
-                        item["locator"] = f"{self.node_name}:{i}#{item['id']}"
-                        results.append(item)
+                    found = False
+                    for q in query_candidates:
+                        try:
+                            cur.execute(
+                                """
+                                SELECT s.id, s.title, s.content, s.tags, s.domain_key, s.utility_score
+                                FROM shards s
+                                JOIN shards_fts fts ON s.id = fts.rowid
+                                WHERE shards_fts MATCH ?
+                                LIMIT ?
+                                """,
+                                (q, limit),
+                            )
+                            rows = cur.fetchall()
+                            if rows:
+                                for row in rows:
+                                    item = dict(row)
+                                    item["locator"] = f"{self.node_name}:{i}#{item['id']}"
+                                    results.append(item)
+                                found = True
+                                break
+                        except Exception:
+                            continue
             except Exception:
                 continue
 
