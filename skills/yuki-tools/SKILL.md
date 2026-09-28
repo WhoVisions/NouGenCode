@@ -1,0 +1,38 @@
+---
+name: yuki-tools
+description: Comprehensive suite of tactical multimodal tools recursed from Yuki-Ai (embeddings, semantic retrieval, context caching, grounding, and code utilities).
+---
+
+# ⚡ Yuki Tactical Tools Suite
+
+## 🎯 Overview
+Recursed directly from the core `yuki_tools.py` engine. Provides advanced multimodal tool functions, vector embeddings, context caching, and semantic search utilities.
+
+---
+
+## 🛠️ Key Tool Functions Available
+
+1. **Embeddings & Vector Processing**:
+   * `get_embedding(text, model, task_type)`: Generates dense text embeddings for similarity matching.
+   * `batch_get_embeddings(texts, model, task_type)`: Efficient multi-vector embedding generation.
+2. **Context Caching**:
+   * `create_yuki_cache(content, model, ttl_minutes)`: Creates TTL-managed cached prompts for high-token system prompt efficiency.
+3. **Semantic Retrieval & File Search**:
+   * `create_yuki_search_store(display_name)`: Sets up a managed semantic retriever corpus.
+   * `upload_knowledge_to_store(file_path, store_name)`: Indexes local documents into semantic stores.
+   * `query_yuki_knowledge(query, store_name)`: Queries indexed corpora with citation grounding.
+4. **Autonomous Utilities**:
+   * `get_current_time()`: Safe UTC timestamp formatting.
+   * `safe_print(msg)`: Unicode-safe terminal output avoiding Windows encoding traps.
+
+---
+
+## 🚀 Usage in NouGenCode
+```python
+from skills.yuki_tools.scripts.yuki_tools import (
+    get_embedding,
+    batch_get_embeddings,
+    create_yuki_cache,
+    query_yuki_knowledge,
+)
+```
