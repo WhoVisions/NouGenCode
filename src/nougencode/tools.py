@@ -40,8 +40,10 @@ class ToolExecutor:
 
     def run_bash(self, command: str) -> str:
         try:
+            import sys
+            cmd = ["powershell", "-Command", command] if sys.platform == "win32" else ["/bin/bash", "-c", command]
             res = subprocess.run(
-                ["powershell", "-Command", command],
+                cmd,
                 cwd=str(self.root_dir),
                 capture_output=True,
                 text=True,

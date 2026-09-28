@@ -18,7 +18,6 @@ class ShardRecorder:
         try:
             # Try importing nougen_shards if available in environment
             from nougen_shards import core
-            from nougen_shards.models import ShardPayload
 
             content = (
                 f"# NouGenCode Dead Code & Bloat Audit\n\n"
@@ -32,16 +31,17 @@ class ShardRecorder:
 
             content += f"\n```json\n{json.dumps(summary.to_dict(), indent=2)}\n```\n"
 
-            payload = ShardPayload(
+            res = core.capture(
+                event_type="audit",
                 title=f"NouGenCode Audit: {summary.target_root}",
                 content=content,
                 tags=["ncode", "audit", "deadcode", "bloat", "ast"],
                 domain_key="code_health",
-                event_type="audit",
-                utility_score=1.0,
+                utility=1.0,
             )
-            res = core.add_shard(payload)
-            return res.get("id") if isinstance(res, dict) else str(res)
+            if isinstance(res, dict):
+                return str(res.get("shard_id") or res.get("id") or res.get("reason"))
+            return str(res)
         except ImportError:
             # Fallback or standalone execution
             return None

@@ -25,6 +25,7 @@ def main() -> int:
     parser.add_argument("--no-orphans", action="store_true", help="Skip orphan root script scanner")
     parser.add_argument("--no-deps", action="store_true", help="Skip dependency scanner")
     parser.add_argument("--json", action="store_true", help="Output summary as JSON")
+    parser.add_argument("--context-mode", "--ctx", action="store_true", help="Enforce 99% context-mode: store full audit in sandbox and emit compact HUD")
 
     args = parser.parse_args()
     target_path = Path(args.path).resolve()
@@ -75,6 +76,36 @@ def main() -> int:
     if args.save_shard:
         recorder = ShardRecorder()
         shard_id = recorder.record_scan_receipt(summary)
+
+    if args.context_mode:
+        import hashlib
+        import json
+        full_json = json.dumps(summary.to_dict(), indent=2)
+        handle = f"ncode_{hashlib.sha256(full_json.encode('utf-8')).hexdigest()[:12]}"
+        try:
+            from nougen_shards import nougen_context
+            nougen_context.store_sandbox(
+                handle=handle,
+                data=full_json,
+                summary=f"NouGenCode scan for {summary.target_root}: {len(summary.issues)} issues in {summary.files_scanned} files"
+            )
+            nougen_context.log_event(
+                event_type="ncode_scan",
+                content=f"Scanned {summary.target_root}: {len(summary.issues)} issues across {summary.files_scanned} files",
+                metadata={"handle": handle, "target": summary.target_root, "issues": len(summary.issues)}
+            )
+        except Exception:
+            pass
+
+        print(f"📦 [Context-Mode Active: 99% Bloat Filter]")
+        print(f"• Target: {summary.target_root}")
+        print(f"• Files: {summary.files_scanned} | Issues: {len(summary.issues)}")
+        for itype, count in summary.issues_by_type.items():
+            print(f"  - {itype}: {count}")
+        if shard_id:
+            print(f"• Shard ID: {shard_id}")
+        print(f"• Sandbox Handle: {handle} (recall via `nougen ctx get {handle}`)")
+        return 0
 
     if args.json:
         import json
