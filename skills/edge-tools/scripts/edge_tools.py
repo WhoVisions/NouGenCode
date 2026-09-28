@@ -108,7 +108,7 @@ def batch_get_embeddings(texts: list, model: str = EMBEDDING_MODEL, task_type: s
 
 # --- Semantic Retriever (File Search Store) ---
 
-def create_yuki_search_store(display_name: str = "Yuki-Ai Brain") -> str:
+def create_edge-search_store(display_name: str = "edge-Ai Brain") -> str:
     """Creates a new File Search Store (Semantic Retriever corpus)."""
     safe_print(f"\n[RETRIEVER] Creating Store: {display_name}")
     try:
@@ -146,7 +146,7 @@ def upload_knowledge_to_store(file_path: str, store_name: str = None, display_na
         safe_print(f"{Colors.ERROR_RED}[ERROR] Upload failed: {e}{Colors.RESET}")
         return ""
 
-def list_yuki_stores() -> list:
+def list_edge-stores() -> list:
     """Lists all available knowledge stores."""
     try:
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -156,7 +156,7 @@ def list_yuki_stores() -> list:
         safe_print(f"{Colors.ERROR_RED}[ERROR] List stores failed: {e}{Colors.RESET}")
         return []
 
-def query_yuki_knowledge(query: str, store_name: str = None) -> str:
+def query_edge-knowledge(query: str, store_name: str = None) -> str:
     """Performs a semantic search query against the File Search Store."""
     if not store_name:
         store_name = f"fileSearchStores/{FILE_SEARCH_STORE_NAME}"
@@ -184,7 +184,7 @@ def query_yuki_knowledge(query: str, store_name: str = None) -> str:
 
 # --- Context Caching ---
 
-def create_yuki_cache(content: str, model: str = FLASH_MODEL, ttl_minutes: int = 60) -> str:
+def create_edge-cache(content: str, model: str = FLASH_MODEL, ttl_minutes: int = 60) -> str:
     """
     Creates a cached content object for long system prompts or character blueprints.
     Reduces latency and cost for repeated high-token requests.
@@ -306,7 +306,7 @@ def generate_cosplay_image(prompt: str, aspect_ratio: str = "3:4", resolution: s
                             print(f"    [Thinking/Text]: {part.text[:100]}...")
                         if part.inline_data:
                             os.makedirs("generated_images", exist_ok=True)
-                            filename = f"generated_images/yuki_{timestamp}_{i+1}.png"
+                            filename = f"generated_images/edge-{timestamp}_{i+1}.png"
                             with open(filename, "wb") as f:
                                 f.write(part.inline_data.data)
                             saved_files.append(filename)
@@ -330,7 +330,7 @@ def generate_cosplay_image(prompt: str, aspect_ratio: str = "3:4", resolution: s
             
             if hasattr(response, 'generated_images'):
                 for i, image in enumerate(response.generated_images):
-                    filename = f"generated_images/yuki_{timestamp}_{i+1}.png"
+                    filename = f"generated_images/edge-{timestamp}_{i+1}.png"
                     with open(filename, "wb") as f:
                         f.write(image.image.image_bytes)
                     saved_files.append(filename)
@@ -394,7 +394,7 @@ def generate_cosplay_video(prompt: str, image_path: str = None, aspect_ratio: st
             )
             
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"generated_images/yuki_video_{timestamp}.mp4"
+        filename = f"generated_images/edge-video_{timestamp}.mp4"
         
         if hasattr(response, 'generated_videos') and response.generated_videos:
             video = response.generated_videos[0]
@@ -477,7 +477,7 @@ def read_file(filepath: str) -> str:
     except Exception as e:
         return f"Error reading file: {e}"
 
-def upload_to_gcs(filepath: str, content: str, bucket_name: str = "yuki-persistent-storage") -> str:
+def upload_to_gcs(filepath: str, content: str, bucket_name: str = "edge-persistent-storage") -> str:
     """
     Uploads content to a Google Cloud Storage bucket.
     
@@ -499,7 +499,7 @@ def upload_to_gcs(filepath: str, content: str, bucket_name: str = "yuki-persiste
     except Exception as e:
         return f"Error uploading to GCS: {e}"
 
-def upload_file_to_gcs(local_path: str, gcs_path: str, bucket_name: str = "yuki-persistent-storage") -> str:
+def upload_file_to_gcs(local_path: str, gcs_path: str, bucket_name: str = "edge-persistent-storage") -> str:
     """
     Uploads a local file to a Google Cloud Storage bucket.
     
@@ -521,7 +521,7 @@ def upload_file_to_gcs(local_path: str, gcs_path: str, bucket_name: str = "yuki-
     except Exception as e:
         return f"Error uploading to GCS: {e}"
 
-def download_from_gcs(gcs_path: str, local_path: str, bucket_name: str = "yuki-persistent-storage") -> str:
+def download_from_gcs(gcs_path: str, local_path: str, bucket_name: str = "edge-persistent-storage") -> str:
     """
     Downloads content from a Google Cloud Storage bucket to a local file.
     
@@ -970,7 +970,7 @@ def generate_audio(text: str, voice: str = "Kore", speaker_map: dict = None) -> 
         client = genai.Client(vertexai=True, project=PROJECT_ID, location="global")
         
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"generated_audio/yuki_audio_{timestamp}.wav"
+        filename = f"generated_audio/edge-audio_{timestamp}.wav"
         os.makedirs("generated_audio", exist_ok=True)
         
         config_args = {

@@ -1,4 +1,4 @@
-"""Recurse Engine: Ingest, adapt, and remix tools and skills from Yuki-Ai into NouGenCode.
+"""Recurse Engine: Ingest, adapt, and remix tools and skills from edge-Ai into NouGenCode.
 
 Doctrine:
 - Deep grep, leverage, combine, copy, transform, refactor, remix.
@@ -18,17 +18,17 @@ from .skills_engine import SkillRegistry
 from .context_gate import ContextGate
 
 
-def resolve_yuki_path() -> Optional[Path]:
-    """Dynamically resolves the local Yuki-Ai directory if available."""
-    env_p = os.environ.get("YUKI_AI_DIR")
+def resolve_edge-path() -> Optional[Path]:
+    """Dynamically resolves the local edge-Ai directory if available."""
+    env_p = os.environ.get("edge_AI_DIR")
     if env_p and Path(env_p).is_dir():
         return Path(env_p).resolve()
 
     home = Path.home()
     candidates = [
-        home / "HQ_WhoArt" / "Outpost" / "Yuki-Ai",
-        home / "Outpost" / "Yuki-Ai",
-        Path("C:/Users/super/HQ_WhoArt/Outpost/Yuki-Ai"),
+        home / "HQ_WhoArt" / "Outpost" / "edge-Ai",
+        home / "Outpost" / "edge-Ai",
+        Path("C:/Users/super/HQ_WhoArt/Outpost/edge-Ai"),
     ]
     for c in candidates:
         if c.is_dir():
@@ -37,19 +37,19 @@ def resolve_yuki_path() -> Optional[Path]:
 
 
 class RecurseEngine:
-    """Recurses and synthesizes tools and skills from Yuki-Ai into clean NouGenCode packages."""
+    """Recurses and synthesizes tools and skills from edge-Ai into clean NouGenCode packages."""
 
     def __init__(self, dest_skills_dir: Optional[Path] = None) -> None:
-        self.yuki_dir = resolve_yuki_path()
+        self.edge-dir = resolve_edge-path()
         self.dest_skills = dest_skills_dir or (Path.cwd() / "skills")
         self.dest_skills.mkdir(parents=True, exist_ok=True)
         self.context_gate = ContextGate()
 
     def discover_tools(self) -> List[Dict[str, Any]]:
-        """Scans Yuki-Ai tools directory and analyzes tools for recursion."""
-        if not self.yuki_dir:
+        """Scans edge-Ai tools directory and analyzes tools for recursion."""
+        if not self.edge-dir:
             return []
-        tools_dir = self.yuki_dir / "tools"
+        tools_dir = self.edge-dir / "tools"
         if not tools_dir.is_dir():
             return []
 
@@ -75,10 +75,10 @@ class RecurseEngine:
         return results
 
     def recurse_as_skill(self, tool_name: str, target_skill_name: Optional[str] = None) -> Optional[Path]:
-        """Takes a tool or subsystem from Yuki-Ai, strips private IP names,
+        """Takes a tool or subsystem from edge-Ai, strips private IP names,
         compiles it into a clean, reusable NouGenCode skill package.
         """
-        if not self.yuki_dir:
+        if not self.edge-dir:
             return None
 
         tools = {t["name"]: t for t in self.discover_tools()}
@@ -93,7 +93,7 @@ class RecurseEngine:
         sanitized_code = re.sub(r"192\.168\.\d+\.\d+", "127.0.0.1", code)
         sanitized_code = re.sub(r"\b(WhoArt|Hyperion|blade|phoebus)\b", "NodeWorker", sanitized_code)
 
-        skill_slug = target_skill_name or f"yuki-{tool_name.replace('_', '-')}"
+        skill_slug = target_skill_name or f"edge-{tool_name.replace('_', '-')}"
         skill_dir = self.dest_skills / skill_slug
         skill_dir.mkdir(parents=True, exist_ok=True)
 

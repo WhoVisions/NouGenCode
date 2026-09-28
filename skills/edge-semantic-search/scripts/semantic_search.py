@@ -1,5 +1,5 @@
 """
-Semantic Search Module for Yuki App
+Semantic Search Module for edge App
 Uses Gemini Embeddings (gemini-embedding-001) for vector-based similarity search.
 """
 
@@ -15,7 +15,7 @@ from google.genai import types
 # Configuration
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768  # Good balance of quality vs storage
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "database", "yuki_knowledge.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "database", "edge-knowledge.db")
 
 # GCP Configuration
 PROJECT_ID = "gifted-cooler-479623-r7"

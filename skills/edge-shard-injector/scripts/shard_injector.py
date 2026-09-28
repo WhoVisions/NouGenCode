@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # CONFIG
-DB_PATH = r"C:\Users\super\Outpost\Yuki-Ai\persistence\antigravity_memory.db"
+DB_PATH = r"./data/memory.db"
 BRAIN_DIR = r"C:\Users\super\.gemini\antigravity\brain"
 TMP_CHAT_DIR = r"C:\Users\super\.gemini\tmp\super\chats"
 

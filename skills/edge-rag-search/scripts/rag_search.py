@@ -2,7 +2,7 @@ import sqlite3
 import argparse
 from google.cloud import bigquery
 
-def search_sqlite(query, db_path='C:/Yuki_Local/database/yuki_knowledge.db'):
+def search_sqlite(query, db_path='C:/edge_Local/database/edge-knowledge.db'):
     print(f"--- Searching SQLite: {db_path} ---")
     results = []
     try:
@@ -27,7 +27,7 @@ def search_bigquery(query):
         client = bigquery.Client()
         # Sanitize query for SQL 
         safe_query = query.replace("'", "\\'")
-        sql = f"SELECT title, content FROM `yuki_memory.knowledge_base` WHERE content LIKE '%{safe_query}%' LIMIT 5"
+        sql = f"SELECT title, content FROM `edge-memory.knowledge_base` WHERE content LIKE '%{safe_query}%' LIMIT 5"
         query_job = client.query(sql)
         for row in query_job.result():
             results.append(f"[BigQuery] {row.title}")

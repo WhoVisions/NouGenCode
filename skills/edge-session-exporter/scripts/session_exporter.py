@@ -4,7 +4,7 @@ import glob
 from datetime import datetime, timedelta
 
 BRAIN_DIR = r"C:\Users\super\.gemini\antigravity\brain"
-SHARDS_DIR = r"C:\Users\super\Outpost\Yuki-Ai\persistence\shards"
+SHARDS_DIR = r"./data/shards"
 
 def export_sessions(limit=None):
     if not os.path.exists(SHARDS_DIR):

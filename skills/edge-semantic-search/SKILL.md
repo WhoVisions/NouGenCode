@@ -1,16 +1,16 @@
 ---
-name: yuki-semantic-search
-description: "Recursed tool from tactical edge engine: Semantic Search Module for Yuki App
+name: edge-semantic-search
+description: "Recursed tool from tactical edge engine: Semantic Search Module for edge App
 Uses Gemini Embeddings (gemini-embedding-001) for vector-based similarity search."
 ---
 
-# ⚡ Yuki Semantic Search
+# ⚡ edge Semantic Search
 
 ## Origin & Overview
 Synthesized from edge tool `semantic_search.py`.
 
 ```python
-Semantic Search Module for Yuki App
+Semantic Search Module for edge App
 Uses Gemini Embeddings (gemini-embedding-001) for vector-based similarity search.
 ```
 

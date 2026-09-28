@@ -1,12 +1,12 @@
 ---
-name: yuki-sync-transcript
+name: edge-rag-search
 description: "Recursed tool from tactical edge engine: Autonomous utility script"
 ---
 
-# ⚡ Yuki Sync Transcript
+# ⚡ edge Rag Search
 
 ## Origin & Overview
-Synthesized from edge tool `sync_transcript.py`.
+Synthesized from edge tool `rag_search.py`.
 
 ```python
 Autonomous utility script

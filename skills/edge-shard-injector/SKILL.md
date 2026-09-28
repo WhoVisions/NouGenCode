@@ -1,9 +1,9 @@
 ---
-name: yuki-shard-injector
+name: edge-shard-injector
 description: "Recursed tool from tactical edge engine: Autonomous utility script"
 ---
 
-# ⚡ Yuki Shard Injector
+# ⚡ edge Shard Injector
 
 ## Origin & Overview
 Synthesized from edge tool `shard_injector.py`.
