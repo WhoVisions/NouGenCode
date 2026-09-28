@@ -1,26 +1,29 @@
-"""NouGen Context Mode Integration: WAL SQLite FTS5 Session & Zero-Token-Flood Protection.
-
-HARD RULE: 99% OF ALL TOOL OUTPUTS, INSPECTIONS, TRACES, AND DATA EXPLORATION
-MUST ROUTE THROUGH NOUGEN CONTEXT MODE TO PREVENT CONTEXT WINDOW SATURATION.
-"""
-
+import os
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-# Canonical local NouGen context path
-NOUGEN_CONTEXT_DIR = Path.home() / ".nougen" / "context"
-SESSION_DB_PATH = NOUGEN_CONTEXT_DIR / "session.db"
+
+def resolve_canonical_context_dir() -> Path:
+    """Dynamically resolves the user's canonical NouGen context directory without hardcoding user folders."""
+    explicit = os.environ.get("NOUGEN_CONTEXT_DIR")
+    if explicit:
+        p = Path(explicit).expanduser().resolve()
+        if p.is_dir():
+            return p
+    # Resolve relative to the current user's genuine home directory
+    return (Path.home() / ".nougen" / "context").resolve()
 
 
 class ContextGate:
     """Hard gatekeeper that logs session events and enforces sandboxed execution."""
 
-    def __init__(self, session_name: str = "nougencode_session") -> None:
+    def __init__(self, session_name: str = "nougencode_session", context_dir: Optional[Path] = None) -> None:
         self.session_name = session_name
-        self.db_path = SESSION_DB_PATH
+        self.context_dir = (context_dir or resolve_canonical_context_dir()).resolve()
+        self.db_path = self.context_dir / "session.db"
         self._init_db()
 
     def _init_db(self) -> None:

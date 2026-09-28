@@ -26,8 +26,8 @@
 nougencode
 
 # Scan specific path or file
-nougencode C:\Users\super\Outpost\NouGenRelay
-nougencode C:\Users\super\Outpost\handoff.py
+nougencode ./path/to/project
+nougencode ./scripts/worker.py
 ```
 
 ### 2. Output as JSON
