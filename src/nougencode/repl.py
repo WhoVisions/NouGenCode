@@ -20,6 +20,7 @@ from .scanners.orphan_scanner import OrphanFileScanner
 from .scanners.dep_scanner import DependencyScanner
 from .model_runner import ModelRunner
 from .shard_recorder import ShardRecorder
+from .shards_bridge import ShardsBridge
 from .models import ScanSummary
 
 
@@ -34,6 +35,7 @@ class ReplSession:
         self.console = Console()
         self.tools = ToolExecutor(self.root_dir)
         self.runner = ModelRunner()
+        self.shards_bridge = ShardsBridge()
         self.history: List[Dict[str, str]] = []
         self.prompt_session = PromptSession(history=InMemoryHistory())
 
@@ -42,10 +44,12 @@ class ReplSession:
             f"# ⚡ NouGenCode (Interactive Terminal Agent)\n\n"
             f"* **Directory**: `{self.root_dir}`\n"
             f"* **Model**: `{self.runner.model_name}` (Ollama Local)\n"
-            f"* **Context Mode**: `ENFORCED (99% Rule)` -> `~/.nougen/context/session.db`\n"
+            f"* **Context Guard**: `ENFORCED (99% Rule)` -> `~/.nougen/context/session.db`\n"
+            f"* **Memory Substrate**: `NouGenShards 9-DB Grid` -> `~/.nougen/shards`\n"
             f"* **Commands**:\n"
             f"  * `/scan` : Run AST deadcode, orphan, and dependency bloat scan\n"
-            f"  * `/ctx <query>` : Search NouGen session context & full event outputs\n"
+            f"  * `/recall <query>` : Search 9-DB NouGenShards memory substrate\n"
+            f"  * `/ctx <query>` : Search NouGen session context & tool events\n"
             f"  * `/view <file>` : View file lines (context-clamped)\n"
             f"  * `/grep <pattern>` : Deep search codebase\n"
             f"  * `/bash <cmd>` : Execute shell command (context-guarded)\n"
@@ -136,6 +140,26 @@ class ReplSession:
                                     f"{ev['content'][:500]}...",
                                     title=f"Context Event #{ev['id']}",
                                     border_style="magenta",
+                                )
+                            )
+                    continue
+
+                if user_input.startswith("/recall "):
+                    query = user_input[8:].strip()
+                    self.console.print(f"[cyan]Searching 9-DB NouGenShards for:[/] '{query}'...")
+                    shards = self.shards_bridge.search_shards(query, limit=4)
+                    if not shards:
+                        self.console.print("[yellow]No shards matched query.[/]")
+                    else:
+                        for s in shards:
+                            self.console.print(
+                                Panel(
+                                    f"[bold green]Title:[/] {s['title']}\n"
+                                    f"[bold yellow]Locator:[/] {s['locator']} | [bold cyan]Utility:[/] {s['utility_score']}\n"
+                                    f"[bold white]Tags:[/] {s['tags']}\n\n"
+                                    f"{s['content'][:400]}...",
+                                    title=f"Shard {s['locator']}",
+                                    border_style="green",
                                 )
                             )
                     continue
