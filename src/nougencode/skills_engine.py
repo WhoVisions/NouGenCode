@@ -135,3 +135,33 @@ class SkillRegistry:
             if tokens & stokens:
                 matched.append(s)
         return matched
+
+    def create_skill(
+        self,
+        name: str,
+        description: str,
+        instructions: str,
+        target_dir: Optional[Path] = None,
+    ) -> Skill:
+        """Creates a new canonical skill package with SKILL.md.
+        Places it in target_dir or the primary resolved skill root dynamically.
+        """
+        slug = re.sub(r"[^a-z0-9_-]+", "-", name.lower().strip()).strip("-") or "new-skill"
+        dest_root = target_dir or (self.roots[0] if self.roots else (Path.home() / ".nougen" / "skills"))
+        skill_folder = (dest_root / slug).resolve()
+        skill_folder.mkdir(parents=True, exist_ok=True)
+        skill_file = skill_folder / "SKILL.md"
+
+        content = (
+            f"---\n"
+            f"name: {slug}\n"
+            f"description: \"{description}\"\n"
+            f"---\n\n"
+            f"# 🛠️ {name}\n\n"
+            f"## Overview\n{description}\n\n"
+            f"## Instructions & Workflow\n{instructions}\n"
+        )
+        skill_file.write_text(content, encoding="utf-8")
+        created_skill = Skill(name=slug, description=description, path=skill_file, body=instructions)
+        self.skills[slug] = created_skill
+        return created_skill

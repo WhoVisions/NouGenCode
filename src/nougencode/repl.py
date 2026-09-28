@@ -53,6 +53,7 @@ class ReplSession:
             f"  * `/scan` : Run AST deadcode, orphan, and dependency bloat scan\n"
             f"  * `/skills` : List discovered fleet skills\n"
             f"  * `/skill <name>` : View full instructions for a skill\n"
+            f"  * `/create-skill <name>` : Create a new canonical SKILL.md package\n"
             f"  * `/verbs` : View 11-verb cognitive instruction set\n"
             f"  * `/recall <query>` : Search 9-DB NouGenShards memory substrate\n"
             f"  * `/ctx <query>` : Search NouGen session context & tool events\n"
@@ -149,6 +150,19 @@ class ReplSession:
                                 border_style="cyan",
                             )
                         )
+                    continue
+
+                if user_input.startswith("/create-skill "):
+                    sname = user_input[14:].strip()
+                    if not sname:
+                        self.console.print("[yellow]Usage: /create-skill <skill-name>[/]")
+                        continue
+                    desc = self.prompt_session.prompt("Enter skill description: ").strip() or "Custom skill"
+                    instr = self.prompt_session.prompt("Enter core instruction workflow: ").strip() or "Standard instructions."
+                    new_skill = self.skill_registry.create_skill(sname, desc, instr)
+                    self.console.print(
+                        f"[bold green]✔ Skill '{new_skill.name}' created at:[/] [cyan]{new_skill.path}[/]"
+                    )
                     continue
 
                 if user_input == "/verbs":
