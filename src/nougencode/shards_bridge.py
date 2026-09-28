@@ -16,7 +16,7 @@ NUM_DBS = 9
 
 
 def detect_node_name() -> str:
-    """Resolves the current machine locator name (WhoArt, blade, etc.)."""
+    """Resolves the current machine locator name dynamically."""
     for var in ("NOUGEN_NODE", "NOUGEN_NODE_NAME", "NOUGEN_MACHINE"):
         val = os.environ.get(var, "").strip()
         if val:

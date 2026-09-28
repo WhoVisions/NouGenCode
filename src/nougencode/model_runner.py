@@ -1,17 +1,18 @@
 """Local model runner for NouGenCode using Ollama or Cloud API."""
 
 import json
+import os
 from typing import Any, Dict, List, Optional
 import urllib.request
 import urllib.error
 
 
 class ModelRunner:
-    """Invokes local Ollama models (solai, Yukiai, gemma4:e2b) or falls back smoothly."""
+    """Invokes local Ollama models (e.g. gemma2, llama3, qwen) or falls back smoothly."""
 
-    def __init__(self, model_name: str = "solai:latest", host: str = "http://localhost:11434") -> None:
-        self.model_name = model_name
-        self.host = host
+    def __init__(self, model_name: str = "llama3:latest", host: str = "http://localhost:11434") -> None:
+        self.model_name = os.environ.get("NOUGEN_MODEL") or model_name
+        self.host = os.environ.get("OLLAMA_HOST") or host
 
     def is_available(self) -> bool:
         try:
