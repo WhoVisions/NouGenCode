@@ -1,0 +1,10 @@
+{
+  "schema_version": "nougen.shadow-replay.v1",
+  "dataset_id": "empty-dataset-is-not-rollout-evidence",
+  "traces": [],
+  "expected": {
+    "total_traces": 0,
+    "divergent_traces": 0,
+    "is_safe_for_rollout": false
+  }
+}
