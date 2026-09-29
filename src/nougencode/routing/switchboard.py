@@ -98,9 +98,6 @@ class Switchboard:
         if not candidates:
             return None
 
-        # Sort by expected competence theta, breaking ties deterministically by provider_id
-        candidates.sort(
-            key=lambda p: (self.get_competence(p.provider_id, capability), -hash(p.provider_id)),
-            reverse=True,
-        )
+        # Provider names only break ties; Python's hash is process-randomized.
+        candidates.sort(key=lambda provider: (-self.get_competence(provider.provider_id, capability), provider.provider_id))
         return candidates[0]
