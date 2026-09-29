@@ -44,6 +44,8 @@ def _capture_shard(checkpoint: MissionCheckpoint) -> str:
     if not result:
         reason = result.get("reason", "capture_failed") if isinstance(result, dict) else "capture_failed"
         raise RuntimeError(f"Shards capture returned {reason}")
+    if isinstance(result, dict) and result.get("shard_id") is not None:
+        return f"shard:captured:{result.get('db_index')}#{result['shard_id']}"
     return "shard:captured"
 
 
