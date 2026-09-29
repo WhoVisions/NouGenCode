@@ -18,18 +18,22 @@ The controller runs a bounded path from intent to a proof object:
 7. The test ladder runs syntax checks and explicit targeted tests, classifying timeouts as unknown.
 8. Security and product critics review provider mutation evidence.
 9. The Evidence Arbiter issues the verified or rejected proof with immutable, content-addressed receipts.
-10. Optional Tracker and Shards/Relay adapters receive a compact postflight checkpoint without source text.
+10. Tracker plugins and the built-in Shards/Relay adapter receive a compact postflight checkpoint without source text.
 
-Tracker and Shards/Relay integrations are injected through adapter interfaces or
-loaded from deployment plugins. Set `NOUGENCODE_TRACKER_ADAPTER` to a Python
+Tracker integrations are injected through adapter interfaces or loaded from
+deployment plugins. Set `NOUGENCODE_TRACKER_ADAPTER` to a Python
 `module:factory` or `module:object` that provides `record_checkpoint(checkpoint)`.
-Set `NOUGENCODE_POSTFLIGHT_ADAPTER` to one that provides
-`capture_checkpoint(checkpoint)`. Factories take no arguments; they can resolve
-their own credentials through the deployment's credential provider. Adapter
-references contain no machine or tenant paths. If a setting is absent, the proof
-reports that integration as not configured; if a configured plugin cannot load,
-controller construction fails with the configuration error instead of silently
-claiming a receipt was published.
+Shards/Relay postflight uses the built-in adapter by default; set
+`NOUGENCODE_POSTFLIGHT_ADAPTER` to override it with a Python `module:factory` or
+`module:object` that provides `capture_checkpoint(checkpoint)`. The built-in
+adapter calls the installed `nougen_shards` package, or resolves its source tree
+from `NOUGEN_SHARDS_SOURCE`. It updates a Relay leg only when the runtime
+identity includes `relay_leg_id`; the update stays `in_progress` until
+independent evidence supports completion. Factories take no arguments and may
+resolve credentials through the deployment's credential provider. Adapter
+references contain no machine or tenant paths. A missing Shards package, Relay
+directory, or active leg is reported in the proof rather than presented as a
+successful capture.
 
 ## Dynamic context paths
 
