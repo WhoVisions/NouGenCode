@@ -1,5 +1,119 @@
 # NouGenCode
 
+## Human-context kernels: time, digestibility, evidence
+
+The `nougencode.time_model`, `nougencode.digestibility`, and
+`nougencode.scenario_model` modules provide small, dependency-free primitives
+for three recurring context failures. Their interfaces make assumptions and
+unknowns visible; they do not manufacture trust or semantic understanding.
+
+### Time model
+
+`resolve_zone(user_iana, machine_iana)` applies explicit-user, machine-IANA,
+then UTC precedence. `estimate_utc` accepts externally supplied aware samples;
+it reports `verified=True` only when at least two distinct source labels agree
+within the declared tolerance. A local clock by itself is always unverified.
+This verifies agreement under the caller's source-independence assumption; it
+does not authenticate those sources. Production callers should obtain time
+samples through their configured trusted-time service and preserve source IDs.
+
+Wall-time classification round-trips both `fold` values through `zoneinfo`.
+Ambiguous fall-back times require `earlier` or `later`; nonexistent spring-gap
+times raise. A recurrence should retain its IANA zone and explicit ambiguity
+policy, derive each occurrence from its intended local calendar date, and use
+the occurrence date plus rule identity as an idempotency key. Elapsed timers
+use `Deadline` and a monotonic reading, never wall-clock subtraction.
+
+### Digestibility model
+
+The semantic extractor is an upstream model contract. It must return ordered
+atomic `MeaningUnit`s with stable IDs, exact source references, estimated token
+cost, dependencies, and claim qualifications. The deterministic partitioner
+minimizes
+
+`Σ_chunks [αN + βD + γJ + δB + λR + μ + ρ((chunk_tokens − target_tokens) / target_tokens)²]`
+
+where N is new concepts, D unresolved dependencies, J unexplained specialist
+terms, B decisions, R repeated concepts, and α/β/γ/δ/λ/μ/ρ are explicit
+calibration weights. Earlier chunks count as introduced concepts; future
+dependencies are charged as unresolved. The algorithm minimizes this objective
+subject to the hard token budget, source order, no lost required units, and
+qualification adjacency. Token costs must come from the target tokenizer (or
+be labeled as an estimate); characters are not tokens. A unit larger than the
+budget is rejected rather than silently cut. `verify_plan` checks structural
+coverage and provenance identity only. It does not establish factual truth,
+clarity, or comprehension.
+
+`ReaderContext` counts only explicitly listed concepts and terms as known.
+`comprehension_cost` exposes the proposed `αN + βD + γJ + δB` score (new
+concepts, unresolved dependencies, unexplained specialist terms, and decisions)
+with tunable weights. The partitioner uses that reader-specific score with
+repetition, fragmentation, and chunk-balance terms. `verify_rendering`
+packages semantic-verifier observations for missing units, added claims, and
+certainty changes, and checks source coverage and prerequisite ordering. A
+model verifier's judgment still needs calibration and human review.
+
+Evaluate chunking with preregistered audience/task cohorts: comprehension
+questions on qualifications and causal links, task completion/accuracy,
+reading time, and omission or distortion rate. Compare against the original
+unpartitioned presentation and a fixed-size baseline, stratified by expertise
+and channel. Tune the cost model on held-out readers; do not call a token or
+readability score a comprehension result.
+
+### Evidence-bounded scenario model
+
+`Feat` requires continuity, source, locator, observed action, conditions, and
+optional measured quantity/unit. `comparable` checks only that both measured
+values share a unit; callers still need to inspect continuity, equipment,
+assistance, fatigue, restraint, and other conditions. `ScenarioState` separates
+physical state, resources, observed knowledge, available equipment, and
+constraints. `apply_preparation` charges declared costs and adds only explicit
+results. `choose_action` considers only actions whose knowledge/equipment and
+resource requirements are satisfied and whose outcome probabilities sum to 1.
+
+The expectation is `Σ_outcomes P(outcome | action, evidence) × U(outcome)`.
+Probabilities and utilities are inputs requiring evidence or declared
+simulation assumptions. This reference layer does not infer canon, invent
+measured character capabilities, or establish that a selected action will
+succeed. Unknown knowledge remains unknown until an explicit preparation
+result adds it.
+
+`choose_plan` implements a normalized constrained plan score after removing
+unauthorized, incapable, non-finite, or over-budget plans:
+`quality − λT(seconds/max_seconds) − λC(cost/max_cost) − λF(failure_probability)`.
+The estimates and policy weights must be supplied and calibrated; no defaults
+make an estimate factual.
+
+`physics_model` implements the attachment's classical estimates: clipped energy
+reserve balance, constant-speed lift force/work/reserve, upward flight thrust
+against gravity and quadratic drag, and non-relativistic impact energy/average
+force. Fictional parameters (collection area, efficiency, thrust, effective
+mass, transfer fraction) stay explicit inputs. Lift feasibility checks force
+and energy separately. The model excludes relativistic motion, structural
+failure, biological durability, and fictional flight momentum mechanisms; its
+outputs are not canon measurements.
+
+### Mission continuity
+
+`mission_runtime` makes objective, required outcomes, constraints, completion
+evidence, and authority reference immutable in `MissionContract`. `MissionJournal`
+appends content-addressed step records and resource-spend receipts. A reported
+success does not count toward completion: every required outcome and every
+completion-evidence reference must occur on a step with an explicitly passing
+named verifier. Stable operation IDs deduplicate identical effects across worker
+replacement; reuse with changed result content fails closed. `resume_packet`
+transfers the intent contract/hash, verified history, unverified reports,
+remaining work, and budget use to a replacement worker; the packet can be
+checked against the original contract before resuming.
+
+This is an in-process reference journal, not durable NouGenShards/Relay/Tracker
+integration. An adapter must persist append-only records and enforce the same
+idempotency key at the external effect boundary. Authentication of the authority
+reference, stale-memory conflict policy, and independent verifier correctness
+remain integration/evaluation requirements.
+
+Run the focused checks with `python -m pytest tests/test_human_context_kernels.py`.
+
 NouGenCode combines repository analysis tools with a provider-neutral software
 engineering control plane. Persistent engineering roles describe responsibilities
 and safety contracts; replaceable providers declare capabilities and are selected
