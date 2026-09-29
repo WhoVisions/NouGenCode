@@ -84,6 +84,24 @@ unauthorized, incapable, non-finite, or over-budget plans:
 The estimates and policy weights must be supplied and calibrated; no defaults
 make an estimate factual.
 
+### NouGenMorph and latent requirements
+
+The existing `NouGenMorphEngine` now requires source provenance before a donor
+pattern becomes a candidate, rejects vendor names in generalized execution
+rules, and advances candidates through recorded tests, independent verification,
+and adoption. A free-form proof string cannot promote a candidate. These
+references make the lifecycle auditable, but they do not authenticate a
+verifier or execute its test suite; the verifier adapter must produce real
+artifact references and authority must be checked at the mutation boundary.
+
+`ProductJudgmentCritic` accepts requirement proposals with evidence IDs rather
+than asserting empty/loading/accessibility behavior from keyword presence.
+Internal NouGen evidence must support an inferred requirement; a donor claim
+alone cannot. Implementation status is accepted only from a different verifier
+with cited evidence. The LSC score penalizes unsupported proposals, while
+implementation and assessment coverage are reported separately so a supported
+but missing requirement remains visible as a gap.
+
 `physics_model` implements the attachment's classical estimates: clipped energy
 reserve balance, constant-speed lift force/work/reserve, upward flight thrust
 against gravity and quadratic drag, and non-relativistic impact energy/average
