@@ -138,3 +138,21 @@ def test_evidence_adapters_are_replaceable_and_optional_failures_are_explicit():
     }
     assert gathered.evidence == (signal,)
     assert gathered.unavailable_adapters == ("optional.persistence",)
+
+
+def test_correlated_evidence_gets_one_vote():
+    from nougencode.resilience import Evidence, _score_hypotheses
+
+    def row(i, group):
+        return Evidence(
+            evidence_id=f"e{i}", source="telemetry", kind="http_503",
+            observed_at="2026-09-29T00:00:00Z",
+            specificity={"upstream_outage": 0.5}, independent_group=group,
+        )
+
+    one_family = [row(i, "cf-edge") for i in range(10)]
+    two_families = [row(0, "cf-edge"), row(1, "origin-probe")]
+    correlated, _ = _score_hypotheses(one_family)
+    independent, _ = _score_hypotheses(two_families)
+    assert correlated["upstream_outage"] == 0.5
+    assert independent["upstream_outage"] == 1.0
