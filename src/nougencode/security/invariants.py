@@ -19,12 +19,24 @@ SECRET_PATTERNS = [
     re.compile(r"AIza[0-9A-Za-z-_]{35}", re.IGNORECASE),
     re.compile(r"ghp_[a-zA-Z0-9]{36}", re.IGNORECASE),
     re.compile(r"-----" + r"BEGIN PRIVATE KEY" + r"-----", re.IGNORECASE),
+    # Unprefixed credentials only show up through the name they are assigned to,
+    # e.g. a Cloudflare Global API Key (37 hex) in `authKey = '...'`.
+    re.compile(
+        r"(?:api[_-]?key|auth[_-]?key|x-auth-key|secret|token|password|passwd)"
+        r"[\"']?\s*[:=]\s*[\"'][A-Za-z0-9_\-./+]{20,}[\"']",
+        re.IGNORECASE,
+    ),
 ]
 
 FORBIDDEN_PERSONAL_PATHS = [
     re.compile(r"/Users/[a-zA-Z0-9_-]+/(?!(\.nougen|\.gemini))", re.IGNORECASE),
     re.compile(r"C:\\Users\\[a-zA-Z0-9_-]+", re.IGNORECASE),
 ]
+
+
+def _redact(snippet: str) -> str:
+    """Name the shape of a match without echoing any of the credential."""
+    return f"<redacted {len(snippet)} chars>"
 
 
 @dataclass
@@ -49,7 +61,7 @@ class ConcentricSecurityGate:
                     SecurityViolation(
                         violation_type="CREDENTIAL_EXPOSURE",
                         message="Hardcoded API key or private key detected in source.",
-                        matched_snippet=match.group(0)[:15] + "...",
+                        matched_snippet=_redact(match.group(0)),
                     )
                 )
 
