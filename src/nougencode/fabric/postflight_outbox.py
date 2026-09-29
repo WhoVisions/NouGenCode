@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import threading
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 
 from nougencode.canonical import canonical_sha256, normalize_timestamp
 
@@ -38,6 +38,26 @@ class OutboxRecord:
             "previous_hash": self.previous_hash,
         }
         return _sha256(content) == self.record_hash
+
+
+class OutboxBackend(Protocol):
+    """Structural contract shared by volatile and durable outbox providers."""
+
+    def append(
+        self,
+        dedup_key: str,
+        target_channel: str,
+        payload: Mapping[str, Any],
+        timestamp: Optional[str] = None,
+    ) -> Tuple[OutboxRecord, bool]: ...
+
+    def mark_delivered(self, dedup_key: str) -> bool: ...
+
+    def get_pending(self) -> Sequence[OutboxRecord]: ...
+
+    def verify_chain(self) -> Tuple[bool, Optional[str]]: ...
+
+    def count(self) -> int: ...
 
 
 class PostflightOutbox:

@@ -4,7 +4,8 @@ from nougencode.fabric.change_contract import ChangeContract, FunctionalRequirem
 from nougencode.fabric.context_broker import ContextBroker, ContextItem, CoherenceReport
 from nougencode.fabric.engine import ChangeFabricEngine, ChangeFabricExecutionResult
 from nougencode.fabric.hook_abi import HookABIAdapter, HookPhase, HookContext, HookExecutionResult
-from nougencode.fabric.postflight_outbox import PostflightOutbox, OutboxRecord
+from nougencode.fabric.postflight_outbox import OutboxBackend, PostflightOutbox, OutboxRecord
+from nougencode.fabric.durable_outbox import SQLitePostflightOutbox
 from nougencode.fabric.provider_ucb import ContextualProviderUCB, ProviderArm, RouteDecision
 from nougencode.fabric.shadow_policy import ShadowPolicyReplayer, PolicyRule, ExecutionTrace, ReplayReport
 from nougencode.fabric.telemetry import (
@@ -30,6 +31,8 @@ __all__ = [
     "HookContext",
     "HookExecutionResult",
     "PostflightOutbox",
+    "OutboxBackend",
+    "SQLitePostflightOutbox",
     "OutboxRecord",
     "ContextualProviderUCB",
     "ProviderArm",
