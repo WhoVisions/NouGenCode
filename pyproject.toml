@@ -17,3 +17,6 @@ nougencode = "nougencode.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+nougencode = ["schemas/*.json"]

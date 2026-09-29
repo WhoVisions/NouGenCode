@@ -32,6 +32,15 @@ def main() -> int:
     p_route = subparsers.add_parser("route", help="Empirically preview optimal provider resolution for a role")
     p_route.add_argument("--role", default="builder", help="Role to evaluate (architect, builder, critic, tester, security)")
 
+    p_profile = subparsers.add_parser("capability-profile", help="Validate and resolve a scheduler capability profile")
+    profile_subparsers = p_profile.add_subparsers(dest="profile_command", required=True)
+    p_profile_validate = profile_subparsers.add_parser("validate", help="Validate profile evidence and print its current scheduler view")
+    p_profile_validate.add_argument("profile_path", type=Path, help="Path to a JSON capability profile")
+    p_profile_validate.add_argument("--as-of", help="Timezone-qualified ISO timestamp for deterministic freshness evaluation")
+
+    p_golden = subparsers.add_parser("golden-slice", help="Assess a provenance-carrying evidence request and print a proof envelope")
+    p_golden.add_argument("request_path", type=Path, help="Path to a golden-slice request JSON file")
+
     # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
@@ -99,6 +108,35 @@ def main() -> int:
             print(f"  Optimal Provider: {chosen.name} (Utility: {score:.3f})")
         else:
             print("  No currently active provider declared for this role.")
+        return 0
+
+    if args.subcommand == "capability-profile":
+        import json
+        from datetime import datetime
+
+        from .capability_profile import CapabilityProfileError, capability_summary, load_profile
+
+        try:
+            profile = load_profile(args.profile_path)
+            as_of = datetime.fromisoformat(args.as_of.replace("Z", "+00:00")) if args.as_of else None
+            print(json.dumps(capability_summary(profile, as_of=as_of), sort_keys=True))
+        except (CapabilityProfileError, ValueError) as exc:
+            sys.stderr.write(f"Capability profile invalid: {exc}\n")
+            return 2
+        return 0
+
+    if args.subcommand == "golden-slice":
+        import json
+
+        from .core.golden_slice import run_golden_slice_request
+
+        try:
+            request = json.loads(args.request_path.read_text(encoding="utf-8"))
+            result = run_golden_slice_request(request)
+            print(json.dumps(result.to_dict(), sort_keys=True))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            sys.stderr.write(f"Golden-slice request invalid: {exc}\n")
+            return 2
         return 0
 
     target_path = Path(args.path).resolve()

@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nougencode:control-plane-golden-slice:1",
+  "title": "NouGenCode evidence-first control-plane golden slice",
+  "oneOf": [
+    {"$ref": "#/$defs/request"},
+    {"$ref": "#/$defs/event"},
+    {"$ref": "#/$defs/coverage"},
+    {"$ref": "#/$defs/result"}
+  ],
+  "$defs": {
+    "timestamp": {"type": "string", "format": "date-time"},
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "as_of", "task", "coverage"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "as_of": {"$ref": "#/$defs/timestamp"},
+        "task": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["task_id", "objective", "capability", "files_expected", "mutation_budget"],
+          "properties": {
+            "task_id": {"type": "string", "minLength": 1},
+            "objective": {"type": "string", "minLength": 1},
+            "capability": {"enum": ["code_search", "architecture", "implementation", "debugging", "test_creation", "test_runner", "static_review", "security_review", "performance_review", "product_review", "visual_review", "regression_review", "arbiter"]},
+            "files_expected": {"type": "array", "items": {"type": "string"}},
+            "mutation_budget": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["max_files", "max_added_lines", "max_deleted_lines"],
+              "properties": {
+                "max_files": {"type": "integer", "minimum": 0},
+                "max_added_lines": {"type": "integer", "minimum": 0},
+                "max_deleted_lines": {"type": "integer", "minimum": 0},
+                "allowed_roots": {"type": "array", "items": {"type": "string"}},
+                "forbidden_roots": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expected_source_ids", "observations"],
+          "properties": {
+            "expected_source_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "observations": {"type": "array", "items": {"$ref": "#/$defs/evidence"}}
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "TIMED_OUT"}}, "required": ["status"]},
+          "then": {"required": ["elapsed_seconds", "budget_seconds"]}
+        },
+        {
+          "if": {"properties": {"status": {"const": "TIMED_OUT"}}, "required": ["status"]},
+          "then": {},
+          "else": {"not": {"anyOf": [{"required": ["elapsed_seconds"]}, {"required": ["budget_seconds"]}]}}
+        }
+      ],
+      "required": ["observation_id", "source_id", "provenance", "value", "status", "observed_at", "freshness_ttl_seconds"],
+      "properties": {
+        "observation_id": {"type": "string", "minLength": 1},
+        "source_id": {"type": "string", "minLength": 1},
+        "provenance": {"type": "string", "minLength": 1},
+        "value": {"type": ["boolean", "null"]},
+        "status": {"enum": ["OBSERVED", "UNKNOWN", "TIMED_OUT", "STALE"]},
+        "observed_at": {"$ref": "#/$defs/timestamp"},
+        "freshness_ttl_seconds": {"type": "number", "minimum": 0},
+        "elapsed_seconds": {"type": "number", "minimum": 0},
+        "budget_seconds": {"type": "number", "minimum": 0}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "schema_version", "mission_id", "sequence", "event_type", "observed_at", "source_id", "payload"],
+      "properties": {
+        "event_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "schema_version": {"const": "1.0.0"},
+        "mission_id": {"type": "string", "minLength": 1},
+        "sequence": {"type": "integer", "minimum": 0},
+        "event_type": {"type": "string", "minLength": 1},
+        "observed_at": {"$ref": "#/$defs/timestamp"},
+        "source_id": {"type": "string", "minLength": 1},
+        "payload": {"type": "object"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage_id", "schema_version", "expected_source_ids", "observations", "missing_source_ids"],
+      "properties": {
+        "coverage_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "schema_version": {"const": "1.0.0"},
+        "expected_source_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "observations": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+        "missing_source_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "coverage", "truth", "decision", "decision_hash", "arbiter_accepts", "proof_receipt"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "event": {"$ref": "#/$defs/event"},
+        "coverage": {"$ref": "#/$defs/coverage"},
+        "truth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "evidence_ids"],
+          "properties": {
+            "status": {"enum": ["PASS", "FAIL", "UNKNOWN", "UNKNOWN_WITHIN_BUDGET"]},
+            "reason": {"type": "string"},
+            "evidence_ids": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["task_id", "capability", "action", "reason"],
+          "properties": {
+            "task_id": {"type": "string"},
+            "capability": {"type": "string"},
+            "action": {"enum": ["ROUTE", "AVOID", "UNKNOWN"]},
+            "reason": {"type": "string"}
+          }
+        },
+        "decision_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "arbiter_accepts": {"type": "boolean"},
+        "proof_receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stage", "source", "sha256", "observed_at"],
+          "properties": {
+            "stage": {"type": "string"},
+            "source": {"type": "string"},
+            "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "observed_at": {"$ref": "#/$defs/timestamp"}
+          }
+        }
+      }
+    }
+  }
+}
