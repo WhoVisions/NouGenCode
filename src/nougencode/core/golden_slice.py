@@ -109,11 +109,13 @@ class EventEnvelope:
     def __post_init__(self) -> None:
         if not self.mission_id.strip() or not self.event_type.strip() or not self.source_id.strip():
             raise ValueError("mission_id, event_type, and source_id are required")
-        if isinstance(self.sequence, bool) or self.sequence < 0:
+        if isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 0:
             raise ValueError("sequence must be a non-negative integer")
         if self.schema_version != ENVELOPE_SCHEMA_VERSION:
             raise ValueError(f"unsupported envelope schema version: {self.schema_version}")
         _timestamp(self.observed_at, "event.observed_at")
+        if not isinstance(self.payload, Mapping):
+            raise ValueError("payload must be an object")
         _canonical_json(self.payload)
 
     def to_dict(self) -> Dict[str, Any]:

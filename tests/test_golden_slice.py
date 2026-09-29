@@ -222,3 +222,15 @@ def test_event_envelope_rejects_naive_time_and_noncanonical_values():
         EventEnvelope("mission", 0, "event", "2026-09-29T16:00:00", "source", {})
     with pytest.raises(ValueError, match="Out of range float values"):
         EventEnvelope("mission", 0, "event", "2026-09-29T16:00:00Z", "source", {"value": float("nan")})
+
+
+@pytest.mark.parametrize("sequence", [1.5, True])
+def test_event_envelope_rejects_non_integer_sequence(sequence):
+    with pytest.raises(ValueError, match="non-negative integer"):
+        EventEnvelope("mission", sequence, "event", "2026-09-29T16:00:00Z", "source", {})
+
+
+@pytest.mark.parametrize("payload", [["not", "an", "object"], "not an object", None])
+def test_event_envelope_rejects_non_object_payload(payload):
+    with pytest.raises(ValueError, match="payload must be an object"):
+        EventEnvelope("mission", 0, "event", "2026-09-29T16:00:00Z", "source", payload)
