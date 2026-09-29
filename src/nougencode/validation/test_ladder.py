@@ -6,6 +6,7 @@ from enum import IntEnum
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 from typing import List, Optional
 
@@ -56,7 +57,7 @@ class TestLadder:
         for f in files:
             full_path = self.repo_root / f
             if full_path.suffix == ".py" and full_path.exists():
-                cmd = ["python3", "-m", "py_compile", str(full_path)]
+                cmd = [sys.executable, "-m", "py_compile", str(full_path)]
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
