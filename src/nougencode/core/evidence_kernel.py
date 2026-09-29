@@ -33,6 +33,9 @@ class Provenance:
     node_id: Optional[str] = None
     provider: Optional[str] = None
     observed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    # Evidence authority (higher outranks lower): e.g. authenticated end-to-end
+    # probe > unauthenticated probe > cache > historical shard. Ties are equals.
+    authority: int = 0
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,14 @@ class TruthResolver:
             if x.state not in {EvidenceState.STALE, EvidenceState.FAILED}
         ]
 
+        # Authority beats headcount: only the highest-authority live observations
+        # arbitrate. Lower-authority dissent is recorded, never counted as a vote.
+        outranked = 0
+        if live:
+            top = max(x.provenance.authority for x in live)
+            outranked = sum(1 for x in live if x.provenance.authority < top)
+            live = [x for x in live if x.provenance.authority == top]
+
         states = {x.state for x in live}
         if len(states) > 1:
             state = EvidenceState.CONFLICT
@@ -140,6 +151,8 @@ class TruthResolver:
             state = next(iter(states))
             conf = 1.0 if coverage.complete else 0.8
             reasons = (f"unanimous active state: {state.value}",)
+            if outranked:
+                reasons += (f"{outranked} lower-authority observation(s) outranked",)
         else:
             state = EvidenceState.UNKNOWN
             conf = 0.0
