@@ -15,6 +15,7 @@ from .core.checkpoint import (
     NullTrackerFeedback,
     PostflightCapture,
     TrackerFeedback,
+    load_configured_adapters,
 )
 from .core.fanout import FanoutGovernor
 from .core.mission import (
@@ -58,10 +59,22 @@ class NouGenCodeController:
         self.test_ladder = TestLadder(repo_root)
         self.context_gate = context_gate or ContextGate()
         self.fanout_governor = fanout_governor or FanoutGovernor()
-        self.tracker_feedback = tracker_feedback or NullTrackerFeedback()
-        self.postflight_capture = postflight_capture or NullPostflightCapture()
-        self._tracker_configured = tracker_feedback is not None
-        self._postflight_configured = postflight_capture is not None
+        configured_tracker, configured_postflight = load_configured_adapters(
+            load_tracker=tracker_feedback is None,
+            load_postflight=postflight_capture is None,
+        )
+        self.tracker_feedback = (
+            tracker_feedback if tracker_feedback is not None
+            else configured_tracker if configured_tracker is not None
+            else NullTrackerFeedback()
+        )
+        self.postflight_capture = (
+            postflight_capture if postflight_capture is not None
+            else configured_postflight if configured_postflight is not None
+            else NullPostflightCapture()
+        )
+        self._tracker_configured = tracker_feedback is not None or configured_tracker is not None
+        self._postflight_configured = postflight_capture is not None or configured_postflight is not None
         self.provider_timeout_s = provider_timeout_s
 
     @staticmethod

@@ -20,9 +20,16 @@ The controller runs a bounded path from intent to a proof object:
 9. The Evidence Arbiter issues the verified or rejected proof with immutable, content-addressed receipts.
 10. Optional Tracker and Shards/Relay adapters receive a compact postflight checkpoint without source text.
 
-Tracker and Shards/Relay integrations are injected through adapter interfaces. If no
-adapter is configured, the proof reports that status as not configured; it does
-not claim a receipt was published.
+Tracker and Shards/Relay integrations are injected through adapter interfaces or
+loaded from deployment plugins. Set `NOUGENCODE_TRACKER_ADAPTER` to a Python
+`module:factory` or `module:object` that provides `record_checkpoint(checkpoint)`.
+Set `NOUGENCODE_POSTFLIGHT_ADAPTER` to one that provides
+`capture_checkpoint(checkpoint)`. Factories take no arguments; they can resolve
+their own credentials through the deployment's credential provider. Adapter
+references contain no machine or tenant paths. If a setting is absent, the proof
+reports that integration as not configured; if a configured plugin cannot load,
+controller construction fails with the configuration error instead of silently
+claiming a receipt was published.
 
 ## Dynamic context paths
 

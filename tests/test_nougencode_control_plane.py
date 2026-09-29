@@ -1,6 +1,8 @@
 """Unit tests for the NouGenCode Universal Control Plane MVP."""
 
 import asyncio
+import sys
+import types
 from typing import Any, Dict
 import pytest
 
@@ -24,6 +26,37 @@ from nougencode.routing.switchboard import (
     Switchboard,
 )
 from nougencode.validation.test_ladder import TestLadder
+
+
+def test_controller_loads_configured_adapter_factories(monkeypatch):
+    module = types.ModuleType("fixture_nougencode_adapters")
+
+    class Feedback:
+        def record_checkpoint(self, checkpoint: MissionCheckpoint):
+            pass
+
+    class Capture:
+        def capture_checkpoint(self, checkpoint: MissionCheckpoint):
+            pass
+
+    module.make_tracker = Feedback
+    module.make_postflight = Capture
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setenv("NOUGENCODE_TRACKER_ADAPTER", f"{module.__name__}:make_tracker")
+    monkeypatch.setenv("NOUGENCODE_POSTFLIGHT_ADAPTER", f"{module.__name__}:make_postflight")
+
+    controller = NouGenCodeController(repo_root=".", switchboard=Switchboard())
+
+    assert isinstance(controller.tracker_feedback, Feedback)
+    assert isinstance(controller.postflight_capture, Capture)
+    assert controller._tracker_configured is True
+    assert controller._postflight_configured is True
+
+
+def test_invalid_configured_adapter_fails_during_controller_setup(monkeypatch):
+    monkeypatch.setenv("NOUGENCODE_TRACKER_ADAPTER", "missing_separator")
+    with pytest.raises(ValueError, match="module:factory_or_object"):
+        NouGenCodeController(repo_root=".", switchboard=Switchboard())
 
 
 class MockCodeProvider(CodeProvider):

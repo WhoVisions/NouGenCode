@@ -1,7 +1,9 @@
 """Provider-neutral lifecycle hooks for Tracker and Shards/Relay adapters."""
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+import importlib
+import os
+from typing import Optional, Protocol, Tuple
 
 from nougencode.arbitration.arbiter import EvidenceReceipt
 
@@ -39,3 +41,36 @@ class NullTrackerFeedback:
 class NullPostflightCapture:
     def capture_checkpoint(self, checkpoint: MissionCheckpoint) -> None:
         return None
+
+
+def _load_adapter(spec: str, required_method: str):
+    """Load an adapter object or zero-argument factory from ``module:attribute``."""
+    module_name, separator, attribute_name = spec.partition(":")
+    if not separator or not module_name.strip() or not attribute_name.strip():
+        raise ValueError("adapter must use the format 'python.module:factory_or_object'")
+
+    module = importlib.import_module(module_name.strip())
+    configured = getattr(module, attribute_name.strip())
+    adapter = configured() if callable(configured) else configured
+    if not callable(getattr(adapter, required_method, None)):
+        raise TypeError(f"configured adapter must provide {required_method}()")
+    return adapter
+
+
+def load_configured_adapters(
+    *, load_tracker: bool = True, load_postflight: bool = True
+) -> Tuple[Optional[TrackerFeedback], Optional[PostflightCapture]]:
+    """Resolve deployment plugins without embedding machine or tenant paths.
+
+    ``NOUGENCODE_TRACKER_ADAPTER`` and ``NOUGENCODE_POSTFLIGHT_ADAPTER`` each
+    accept a Python ``module:factory`` or ``module:object`` reference. A plugin
+    is imported only when that setting is present.
+    """
+    tracker_spec = os.environ.get("NOUGENCODE_TRACKER_ADAPTER", "").strip() if load_tracker else ""
+    postflight_spec = (
+        os.environ.get("NOUGENCODE_POSTFLIGHT_ADAPTER", "").strip()
+        if load_postflight else ""
+    )
+    tracker = _load_adapter(tracker_spec, "record_checkpoint") if tracker_spec else None
+    postflight = _load_adapter(postflight_spec, "capture_checkpoint") if postflight_spec else None
+    return tracker, postflight
