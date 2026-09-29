@@ -17,6 +17,17 @@ class ToolExecutor:
         self.root_dir = root_dir.resolve()
         self.context_gate = ContextGate()
 
+    def _resolve_write_target(self, file_path: str) -> Path:
+        """Resolve a write path and reject targets outside the workspace."""
+        if not isinstance(file_path, str) or not file_path.strip():
+            raise ValueError("file_path must be a non-empty path")
+        target = (self.root_dir / file_path).resolve()
+        try:
+            target.relative_to(self.root_dir)
+        except ValueError as exc:
+            raise ValueError("write path must remain within the workspace") from exc
+        return target
+
     def view_file(self, file_path: str, max_lines: int = 150) -> str:
         target = (self.root_dir / file_path).resolve()
         if not target.exists():
@@ -31,8 +42,8 @@ class ToolExecutor:
             return f"Error reading file: {e}"
 
     def write_file(self, file_path: str, content: str) -> str:
-        target = (self.root_dir / file_path).resolve()
         try:
+            target = self._resolve_write_target(file_path)
             # Auto-fix Python syntax errors before code touches disk
             heal_notice = ""
             if file_path.endswith(".py"):
