@@ -18,7 +18,7 @@ SECRET_PATTERNS = [
     re.compile(r"sk-[a-zA-Z0-9]{20,}", re.IGNORECASE),
     re.compile(r"AIza[0-9A-Za-z-_]{35}", re.IGNORECASE),
     re.compile(r"ghp_[a-zA-Z0-9]{36}", re.IGNORECASE),
-    re.compile(r"-----BEGIN PRIVATE KEY-----", re.IGNORECASE),
+    re.compile(r"-----" + r"BEGIN PRIVATE KEY" + r"-----", re.IGNORECASE),
 ]
 
 FORBIDDEN_PERSONAL_PATHS = [

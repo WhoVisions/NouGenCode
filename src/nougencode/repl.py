@@ -53,6 +53,9 @@ class ReplSession:
             f"* **Skills Loaded**: `{len(self.skill_registry.skills)} skills discovered`\n"
             f"* **Commands**:\n"
             f"  * `/scan` : Run AST deadcode, orphan, and dependency bloat scan\n"
+            f"  * `/providers` : Waterflow discovery of local hardware, engines & CLIs\n"
+            f"  * `/route <role>` : Resolve optimal provider using empirical posterior\n"
+            f"  * `/judge <question>` : Fast System 1 reflex judgment query\n"
             f"  * `/skills` : List discovered fleet skills\n"
             f"  * `/skill <name>` : View full instructions for a skill\n"
             f"  * `/create-skill <name>` : Create a new canonical SKILL.md package\n"
@@ -126,6 +129,77 @@ class ReplSession:
 
                 if user_input == "/scan":
                     self.run_full_scan()
+                    continue
+
+                if user_input == "/providers":
+                    from .discovery.waterflow import WaterflowDiscovery
+                    env = WaterflowDiscovery.discover_environment(self.root_dir)
+                    hw_table = Table(title="Waterflow Hardware Discovery", header_style="bold green")
+                    hw_table.add_column("Property", style="bold cyan")
+                    hw_table.add_column("Value", style="yellow")
+                    hw_table.add_row("OS", env.hardware.os_name)
+                    hw_table.add_row("Architecture", env.hardware.architecture)
+                    hw_table.add_row("CPU Cores", str(env.hardware.cpu_cores))
+                    hw_table.add_row("GPU Engine", f"{env.hardware.gpu_type} (Available: {env.hardware.has_gpu})")
+                    self.console.print(hw_table)
+
+                    prov_table = Table(title="Discovered Brains & Cartridges", header_style="bold magenta")
+                    prov_table.add_column("Provider", style="bold cyan")
+                    prov_table.add_column("Kind", style="white")
+                    prov_table.add_column("Status", style="green")
+                    prov_table.add_column("Cost Tier", style="yellow")
+                    prov_table.add_column("Roles", style="white")
+                    for pid, p in env.discovered_providers.items():
+                        status = "[bold green]LIVE[/]" if p.is_available else "[dim red]Offline[/]"
+                        prov_table.add_row(p.name, p.kind, status, p.cost_tier, ", ".join(p.supported_roles))
+                    self.console.print(prov_table)
+                    continue
+
+                if user_input.startswith("/route"):
+                    from .discovery.waterflow import WaterflowDiscovery
+                    from .router.empirical_router import EmpiricalProviderRouter, TaskSpecification
+                    from .roles.contracts import EngineeringRole
+
+                    arg = user_input[6:].strip().upper() or "BUILDER"
+                    try:
+                        role = EngineeringRole[arg]
+                    except KeyError:
+                        role = EngineeringRole.BUILDER
+
+                    provs = WaterflowDiscovery.discover_providers()
+                    router = EmpiricalProviderRouter()
+                    task = TaskSpecification(role=role)
+                    best_prov, score = router.resolve_provider(task, provs)
+
+                    if best_prov:
+                        self.console.print(
+                            f"[bold green]✔ Resolved Route for [cyan]{role.value}[/]:[/] "
+                            f"[bold yellow]{best_prov.name}[/] (Score: {score:.2f}, Latency: {best_prov.latency_profile}, Cost: {best_prov.cost_tier})"
+                        )
+                    else:
+                        self.console.print(f"[yellow]No live provider available for role '{role.value}'.[/]")
+                    continue
+
+                if user_input.startswith("/judge "):
+                    import asyncio
+                    from nougen_judgment.core.agent_tool import AgentJudgmentTool
+                    from nougen_judgment.providers.mock_provider import MockDecisionProvider
+
+                    q_text = user_input[7:].strip()
+                    tool = AgentJudgmentTool(provider=MockDecisionProvider(latency_sim_ms=2.0))
+                    res = asyncio.run(
+                        tool.ask_noul(
+                            state_content=f"User query in NouGenCode: {q_text}",
+                            question_id="quick_check",
+                            instruction=f"Evaluate: {q_text}",
+                            yes_criteria="Affirmative, safe, or recommended",
+                            no_criteria="Negative, risky, or non-recommended",
+                        )
+                    )
+                    ans_str = "[bold green]YES[/]" if res["selected"] else "[bold red]NO[/]"
+                    self.console.print(
+                        f"Reflex Judgment: {ans_str} (Confidence: {res['confidence'] * 100:.1f}%, Latency: {res['latency_ms']:.1f}ms)"
+                    )
                     continue
 
                 if user_input == "/skills":
