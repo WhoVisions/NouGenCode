@@ -55,6 +55,40 @@ The existing scanner CLI remains available:
     nougencode --no-orphans
     nougencode --no-ast
 
+## Scheduler capability profiles
+
+The versioned JSON Schema at `src/nougencode/schemas/scheduler-capability-profile.schema.json`
+defines a portable, time-bounded measurement snapshot for a dynamically discovered
+worker. It is evidence consumed by the existing capability graph, not a second
+registry. Every measured or unknown claim carries its observation time, source, and
+freshness TTL. Devices remain separate entries so schedulers never add VRAM across
+workers as if it were contiguous. An unknown workload stays `UNKNOWN`; stale evidence
+also resolves to `UNKNOWN` at evaluation time.
+
+Validate and resolve a profile before a scheduler consumes it:
+
+    nougencode capability-profile validate profile.json
+    nougencode capability-profile validate profile.json --as-of 2026-09-29T16:00:00Z
+
+The second form makes freshness evaluation reproducible. The validator prints a
+machine-readable summary and exits with status 2 for invalid JSON or contract errors.
+The benchmark runner should write a new observation for each workload and source
+probe, then pass the completed profile through this command before Relay/Shard
+postflight. This keeps measurement, freshness resolution, and persistence as distinct
+steps so unattended runs can stop safely on missing evidence.
+
+The evidence-first control-plane request and result envelopes are described in
+`src/nougencode/schemas/control-plane-golden-slice.schema.json`. An unattended runner
+can assess a versioned request with:
+
+    nougencode golden-slice request.json
+
+Each request carries an explicit task capability, mutation budget, expected evidence
+sources, and timestamp. The command checks source coverage and evidence TTLs, plans
+through the existing `Capability` graph, and emits a content-addressed proof receipt.
+Missing, stale, conflicting, or timed-out evidence yields an unknown decision; the
+command does not start a provider or persist a checkpoint itself.
+
 ## Development
 
 Install the package in editable mode, then run focused tests with the source tree
