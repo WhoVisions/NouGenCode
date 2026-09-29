@@ -13,7 +13,7 @@ from nougencode.core.golden_slice import run_golden_slice, GoldenSliceResult
 from nougencode.fabric.change_contract import ChangeContract
 from nougencode.fabric.context_broker import ContextBroker, ContextItem, CoherenceReport
 from nougencode.fabric.hook_abi import HookABIAdapter, HookPhase
-from nougencode.fabric.postflight_outbox import PostflightOutbox, OutboxRecord
+from nougencode.fabric.postflight_outbox import OutboxBackend, PostflightOutbox, OutboxRecord
 from nougencode.fabric.provider_ucb import ContextualProviderUCB, RouteDecision
 from nougencode.fabric.shadow_policy import ShadowPolicyReplayer, ReplayReport
 from nougencode.fabric.telemetry import OTelTelemetryTracer
@@ -42,7 +42,7 @@ class ChangeFabricEngine:
         context_broker: Optional[ContextBroker] = None,
         test_selector: Optional[InformationGainTestSelector] = None,
         hook_abi: Optional[HookABIAdapter] = None,
-        outbox: Optional[PostflightOutbox] = None,
+        outbox: Optional[OutboxBackend] = None,
         provider_ucb: Optional[ContextualProviderUCB] = None,
         telemetry: Optional[OTelTelemetryTracer] = None,
         shadow_replayer: Optional[ShadowPolicyReplayer] = None,
