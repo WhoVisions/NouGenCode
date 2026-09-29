@@ -17,19 +17,25 @@ class ToolExecutor:
         self.root_dir = root_dir.resolve()
         self.context_gate = ContextGate()
 
-    def _resolve_write_target(self, file_path: str) -> Path:
-        """Resolve a write path and reject targets outside the workspace."""
+    def _resolve_workspace_path(self, file_path: str, action: str) -> Path:
+        """Resolve a path and reject targets outside the workspace."""
         if not isinstance(file_path, str) or not file_path.strip():
             raise ValueError("file_path must be a non-empty path")
         target = (self.root_dir / file_path).resolve()
         try:
             target.relative_to(self.root_dir)
         except ValueError as exc:
-            raise ValueError("write path must remain within the workspace") from exc
+            raise ValueError(f"{action} path must remain within the workspace") from exc
         return target
 
+    def _resolve_write_target(self, file_path: str) -> Path:
+        return self._resolve_workspace_path(file_path, "write")
+
     def view_file(self, file_path: str, max_lines: int = 150) -> str:
-        target = (self.root_dir / file_path).resolve()
+        try:
+            target = self._resolve_workspace_path(file_path, "read")
+        except ValueError as e:
+            return f"Error reading file: {e}"
         if not target.exists():
             return f"Error: File '{file_path}' does not exist."
         if not target.is_file():
