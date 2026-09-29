@@ -81,7 +81,10 @@ class NouGenCodeController:
     def _mission_id(identity: RuntimeIdentity, intent: Intent) -> str:
         identity_fields = {
             key: value for key, value in asdict(identity).items()
-            if key in {"tenant_id", "workspace_id", "machine_id", "repo_id", "session_id", "branch"}
+            if key in {
+                "tenant_id", "workspace_id", "machine_id", "repo_id", "session_id",
+                "branch", "relay_leg_id",
+            }
         }
         digest = hashlib.sha256(
             json.dumps({"identity": identity_fields, "goal": intent.goal}, sort_keys=True).encode("utf-8")
@@ -485,6 +488,9 @@ class NouGenCodeController:
             evidence_receipts=proof.evidence_receipts,
             latency_ms=latency_ms,
             tokens_used=tokens_used,
+            relay_leg_id=identity.relay_leg_id,
+            machine_id=identity.machine_id,
+            agent_id=identity.agent_id,
         )
         try:
             self.tracker_feedback.record_checkpoint(checkpoint)
@@ -492,8 +498,11 @@ class NouGenCodeController:
         except Exception as exc:
             proof.reviews["tracker_feedback"] = f"unknown:{type(exc).__name__}"
         try:
-            self.postflight_capture.capture_checkpoint(checkpoint)
-            proof.reviews["shards_relay_postflight"] = "captured" if self._postflight_configured else "not_configured"
+            capture_result = self.postflight_capture.capture_checkpoint(checkpoint)
+            proof.reviews["shards_relay_postflight"] = (
+                capture_result if isinstance(capture_result, str)
+                else "captured" if self._postflight_configured else "not_configured"
+            )
         except Exception as exc:
             proof.reviews["shards_relay_postflight"] = f"unknown:{type(exc).__name__}"
         return proof

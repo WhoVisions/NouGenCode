@@ -55,6 +55,7 @@ class RuntimeIdentity:
     branch: Optional[str] = None
     provider_id: Optional[str] = None
     agent_id: Optional[str] = None
+    relay_leg_id: Optional[str] = None
 
 
 @dataclass
