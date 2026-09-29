@@ -16,8 +16,23 @@ from .shard_recorder import ShardRecorder
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="nougencode",
-        description="NouGenCode: Fleet AST code cleaner, dead code scanner, and bloat sweeper.",
+        description="NouGenCode: Universal Dynamic Deterministic Software Engineering Control Plane.",
     )
+    subparsers = parser.add_subparsers(dest="subcommand", help="Optional subcommand")
+
+    # discover subcommand (Waterflow)
+    p_disc = subparsers.add_parser("discover", help="Discover local hardware, runtimes, and provider capabilities")
+    p_disc.add_argument("--json", action="store_true", help="Output hardware and providers as JSON")
+
+    # audit subcommand (Concentric Security Gate)
+    p_audit = subparsers.add_parser("audit", help="Audit repository or file for security invariants, paths, and secrets")
+    p_audit.add_argument("audit_target", nargs="?", default=".", help="Target file or directory to audit")
+
+    # route subcommand (Empirical posterior preview)
+    p_route = subparsers.add_parser("route", help="Empirically preview optimal provider resolution for a role")
+    p_route.add_argument("--role", default="builder", help="Role to evaluate (architect, builder, critic, tester, security)")
+
+    # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
     parser.add_argument("--save-shard", action="store_true", help="Record scan receipt into NouGen shards")
@@ -27,6 +42,65 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Output summary as JSON")
 
     args = parser.parse_args()
+
+    # Handle Subcommands
+    if args.subcommand == "discover":
+        from .discovery.waterflow import WaterflowDiscovery
+        hw = WaterflowDiscovery.inspect_hardware()
+        providers = WaterflowDiscovery.discover_providers()
+        if args.json:
+            import json
+            print(json.dumps({
+                "hardware": hw.__dict__,
+                "providers": {k: v.__dict__ for k, v in providers.items()},
+            }, indent=2))
+        else:
+            print(f"Hardware: {hw.os_name} ({hw.architecture}) | {hw.cpu_cores} cores | GPU: {hw.has_gpu} ({hw.gpu_type})")
+            print("Discovered Providers:")
+            for pid, cap in providers.items():
+                avail = "ONLINE" if cap.is_available else "OFFLINE"
+                print(f"  * {cap.name} [{avail}] — Roles: {', '.join(cap.supported_roles)} ({cap.cost_tier})")
+        return 0
+
+    if args.subcommand == "audit":
+        from .security.invariants import ConcentricSecurityGate
+        audit_path = Path(args.audit_target).resolve()
+        violations = []
+        if audit_path.is_file():
+            violations.extend(ConcentricSecurityGate.audit_code(audit_path.read_text(errors="replace")))
+        elif audit_path.is_dir():
+            for f in audit_path.rglob("*.py"):
+                if any(p in f.parts for p in (".venv", "node_modules", ".git")):
+                    continue
+                violations.extend(ConcentricSecurityGate.audit_code(f.read_text(errors="replace")))
+        if violations:
+            print(f"⚠️ Found {len(violations)} security / invariant violations:")
+            for v in violations:
+                print(f"  - [{v.violation_type}] {v.message} ({v.matched_snippet})")
+            return 1
+        print("✅ Invariant audit passed: 0 secrets, 0 personal paths, 0 security leaks.")
+        return 0
+
+    if args.subcommand == "route":
+        from .roles.contracts import EngineeringRole
+        from .router.empirical_router import EmpiricalProviderRouter, TaskSpecification
+        from .discovery.waterflow import WaterflowDiscovery
+        providers = WaterflowDiscovery.discover_providers()
+        router = EmpiricalProviderRouter()
+        role_enum = EngineeringRole.BUILDER
+        try:
+            role_enum = EngineeringRole(args.role.upper())
+        except ValueError:
+            pass
+        task = TaskSpecification(role=role_enum)
+        chosen, score = router.resolve_provider(task, providers)
+        print(f"Empirical Posterior Routing for Role [{role_enum.value.upper()}]:")
+        if chosen:
+            print(f"  Optimal Provider: {chosen.name} (Utility: {score:.3f})")
+        else:
+            print("  No currently active provider declared for this role.")
+        return 0
+
     target_path = Path(args.path).resolve()
 
     if not target_path.exists():
