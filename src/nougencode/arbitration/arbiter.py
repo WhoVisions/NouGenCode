@@ -2,11 +2,10 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import hashlib
-import json
 import time
 from typing import Any, Dict, List
 
+from nougencode.canonical import canonical_sha256, canonical_timestamp
 from nougencode.routing.switchboard import ExecutionStatus
 
 
@@ -39,12 +38,11 @@ class EvidenceReceipt:
 
     @classmethod
     def from_payload(cls, stage: str, source: str, payload: Any) -> "EvidenceReceipt":
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return cls(
             stage=stage,
             source=source,
-            sha256=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-            observed_at=datetime.now(timezone.utc).isoformat(),
+            sha256=canonical_sha256(payload),
+            observed_at=canonical_timestamp(datetime.now(timezone.utc)),
         )
 
 

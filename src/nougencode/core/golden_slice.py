@@ -5,24 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-import hashlib
-import json
 import threading
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from nougencode.arbitration.arbiter import Claim, EvidenceArbiter, EvidenceReceipt
+from nougencode.canonical import canonical_json, canonical_sha256, normalize_timestamp
 from nougencode.core.mission import Capability, MutationBudget, TaskNode
 
 
 ENVELOPE_SCHEMA_VERSION = "1.0.0"
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-
-
 def _sha256(value: Any) -> str:
-    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+    return canonical_sha256(value)
 
 
 def _timestamp(value: str, field: str) -> datetime:
@@ -70,7 +65,7 @@ class EvidenceObservation:
             or self.freshness_ttl_seconds < 0
         ):
             raise ValueError("freshness_ttl_seconds must be non-negative")
-        _timestamp(self.observed_at, "observation.observed_at")
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
 
     def is_fresh(self, as_of: datetime) -> bool:
         if self.status != "OBSERVED" or as_of.tzinfo is None:
@@ -113,10 +108,10 @@ class EventEnvelope:
             raise ValueError("sequence must be a non-negative integer")
         if self.schema_version != ENVELOPE_SCHEMA_VERSION:
             raise ValueError(f"unsupported envelope schema version: {self.schema_version}")
-        _timestamp(self.observed_at, "event.observed_at")
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
         if not isinstance(self.payload, Mapping):
             raise ValueError("payload must be an object")
-        _canonical_json(self.payload)
+        canonical_json(self.payload)
 
     def to_dict(self) -> Dict[str, Any]:
         body = {

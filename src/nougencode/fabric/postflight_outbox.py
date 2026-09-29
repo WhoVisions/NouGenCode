@@ -4,18 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import hashlib
-import json
 import threading
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+from nougencode.canonical import canonical_sha256, normalize_timestamp
 
 
 def _sha256(value: Any) -> str:
-    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+    return canonical_sha256(value)
 
 
 GENESIS_HASH = "0" * 64
@@ -65,7 +61,7 @@ class PostflightOutbox:
             if dedup_key in self._dedup_index:
                 return (self._dedup_index[dedup_key], False)
 
-            now_str = timestamp or datetime.now(timezone.utc).isoformat()
+            now_str = normalize_timestamp(timestamp) if timestamp is not None else datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
             seq = len(self._records)
             prev = self._last_hash
 
