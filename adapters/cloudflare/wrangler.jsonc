@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nougen-code-ingest",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+
+  // One coordinator per tenant: the serialisation point and fence issuer.
+  "durable_objects": {
+    "bindings": [{ "name": "TENANT", "class_name": "TenantCoordinator" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TenantCoordinator"] }],
+
+  // Queue ingress. Messages that exhaust max_retries land in the DLQ; poison
+  // (malformed / tampered) messages are written there explicitly via the DLQ
+  // producer binding, so retries are not wasted on them.
+  "queues": {
+    "producers": [
+      { "binding": "INGEST", "queue": "nougen-code-ingest" },
+      { "binding": "DLQ", "queue": "nougen-code-ingest-dlq" }
+    ],
+    "consumers": [
+      {
+        "queue": "nougen-code-ingest",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "nougen-code-ingest-dlq"
+      }
+    ]
+  },
+
+  "workflows": [
+    { "name": "nougen-code-ingest", "binding": "INGEST_WORKFLOW", "class_name": "IngestWorkflow" }
+  ]
+}
