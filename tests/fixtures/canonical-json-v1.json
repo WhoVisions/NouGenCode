@@ -1,0 +1,53 @@
+{
+  "canonical_version": "nougen.canonical-json.v1",
+  "description": "Language-neutral byte-level vectors; consumers must match canonical_json UTF-8 bytes and SHA-256.",
+  "vectors": [
+    {
+      "id": "object-order-float-thresholds-and-negative-zero",
+      "value": {
+        "z": -0.0,
+        "b": 1e-07,
+        "a": 1e-06,
+        "c": 1e+20,
+        "nested": {
+          "β": true,
+          "a": null
+        }
+      },
+      "canonical_json": "{\"a\":0.000001,\"b\":1e-7,\"c\":100000000000000000000,\"nested\":{\"a\":null,\"β\":true},\"z\":0}",
+      "sha256": "afc5fa7ba740c60cfbb646bc95e5598c82d91c3528e130edc3eba7b74d3ec732"
+    },
+    {
+      "id": "unicode-string",
+      "value": {
+        "text": "café"
+      },
+      "canonical_json": "{\"text\":\"café\"}",
+      "sha256": "fddf2a5f8e88ebba1f1d753f3f1007780a7cf5af7e7ec350f8fb8af70fdc53d6"
+    },
+    {
+      "id": "array-and-scientific-threshold",
+      "value": {
+        "values": [
+          -1,
+          0,
+          1,
+          1.25,
+          1e+21
+        ]
+      },
+      "canonical_json": "{\"values\":[-1,0,1,1.25,1e+21]}",
+      "sha256": "21ba5af57dd2675d17c29e755f52281bebf1d4976ba4153aeba66af9cb1350dd"
+    }
+  ],
+  "timestamps": [
+    {
+      "input": "2026-09-29T13:00:01.000020-04:00",
+      "canonical": "2026-09-29T17:00:01.000020Z"
+    },
+    {
+      "input": "2026-09-29T17:00:01Z",
+      "canonical": "2026-09-29T17:00:01.000000Z"
+    }
+  ]
+}

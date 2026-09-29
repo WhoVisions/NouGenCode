@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+import json
+from pathlib import Path
 
 import pytest
 
@@ -44,3 +46,17 @@ def test_event_identity_is_independent_of_equivalent_timestamp_offsets():
     utc = EventEnvelope("mission", 1, "probe", "2026-09-29T17:00:00Z", "source", {})
     offset = EventEnvelope("mission", 1, "probe", "2026-09-29T13:00:00-04:00", "source", {})
     assert utc.to_dict()["event_id"] == offset.to_dict()["event_id"]
+
+
+def test_shared_canonical_v1_vectors():
+    """Language-neutral vectors keep canonical bytes stable across runtimes."""
+    fixture_path = Path(__file__).parent / "fixtures" / "canonical-json-v1.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    assert fixture["canonical_version"] == "nougen.canonical-json.v1"
+    for vector in fixture["vectors"]:
+        assert canonical_json(vector["value"]) == vector["canonical_json"], vector["id"]
+        assert canonical_sha256(vector["value"]) == vector["sha256"], vector["id"]
+
+    for vector in fixture["timestamps"]:
+        assert normalize_timestamp(vector["input"]) == vector["canonical"], vector["input"]
