@@ -426,12 +426,14 @@ class NouGenCodeController:
                             ))
 
                     critic = ProductJudgmentCritic(penalty_lambda=2.0)
+                    # Do not manufacture inferred requirements from source-code
+                    # keyword presence. A product reasoner must provide proposals
+                    # with repository/user evidence and an independent check.
                     critic_result = critic.evaluate_inferred_requirements(
-                        explicit_requirements=[task.objective],
-                        source_code="\n".join(
-                            mutation.get("content") or "" for mutation in result.mutations
-                        ),
-                        context_evidence=["controller_task_execution"],
+                        explicit_requirements=(task.objective,),
+                        proposals=(),
+                        evidence=(),
+                        implementation_checks=(),
                     )
                     if critic_result.hallucinated_count:
                         claims.append(Claim(
@@ -445,7 +447,10 @@ class NouGenCodeController:
                 receipts.append(EvidenceReceipt.from_payload(
                     "independent_review",
                     "security_and_product_critics",
-                    {"reviewed_tasks": [task.id for task, _ in prepared], "claim_count": len(claims)},
+                    {"reviewed_tasks": [task.id for task, _ in prepared],
+                     "claim_count": len(claims),
+                     "product_proposals_evaluated": 0,
+                     "product_inference_status": "no_evidence_linked_proposals"},
                 ))
 
         remaining = [task.id for task in mission.task_graph if not task.completed]
