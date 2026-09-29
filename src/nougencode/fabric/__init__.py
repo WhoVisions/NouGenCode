@@ -14,6 +14,7 @@ from nougencode.fabric.telemetry import (
     OTEL_GENAI_SEMCONV_VERSION,
 )
 from nougencode.fabric.selector import InformationGainTestSelector, TestMetadata, SelectedTest
+from nougencode.fabric.syntax_guard import SyntaxHealer, SyntaxHealResult, syntax_auto_fix_tool_hook
 
 __all__ = [
     "ChangeContract",
@@ -44,4 +45,7 @@ __all__ = [
     "InformationGainTestSelector",
     "TestMetadata",
     "SelectedTest",
+    "SyntaxHealer",
+    "SyntaxHealResult",
+    "syntax_auto_fix_tool_hook",
 ]
