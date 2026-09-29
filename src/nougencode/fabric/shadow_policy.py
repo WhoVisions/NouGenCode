@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 import math
+from decimal import Decimal
+from numbers import Real
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
@@ -60,15 +62,18 @@ class ReplayReport:
 class ShadowPolicyReplayer:
     """Replays historical traces against candidate policy rules to evaluate rollout safety."""
 
-    def __init__(self, max_allowed_divergence: float = 0.05) -> None:
-        if (
-            isinstance(max_allowed_divergence, bool)
-            or not isinstance(max_allowed_divergence, (int, float))
-            or not 0.0 <= max_allowed_divergence <= 1.0
-            or not math.isfinite(max_allowed_divergence)
+    def __init__(self, max_allowed_divergence: Real | Decimal = 0.05) -> None:
+        if isinstance(max_allowed_divergence, bool) or not isinstance(
+            max_allowed_divergence, (Real, Decimal)
         ):
             raise ValueError("max_allowed_divergence must be a finite number from 0 to 1")
-        self.max_allowed_divergence = max_allowed_divergence
+        try:
+            normalized_threshold = float(max_allowed_divergence)
+        except (OverflowError, TypeError, ValueError):
+            raise ValueError("max_allowed_divergence must be a finite number from 0 to 1") from None
+        if not math.isfinite(normalized_threshold) or not 0.0 <= normalized_threshold <= 1.0:
+            raise ValueError("max_allowed_divergence must be a finite number from 0 to 1")
+        self.max_allowed_divergence = normalized_threshold
         self._shadow_rules: Dict[str, PolicyRule] = {}
 
     def register_shadow_rule(self, rule: PolicyRule) -> None:
@@ -134,7 +139,11 @@ class ShadowPolicyReplayer:
                 divergent_count += 1
 
         div_rate = divergent_count / len(traces)
-        is_safe = div_rate <= self.max_allowed_divergence
+        predicate_failed = any(
+            any("(predicate_error)" in violation for violation in result.violated_rules)
+            for result in results
+        )
+        is_safe = div_rate <= self.max_allowed_divergence and not predicate_failed
 
         return ReplayReport(
             total_traces=len(traces),
