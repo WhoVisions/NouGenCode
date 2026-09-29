@@ -118,7 +118,46 @@ class NouGenCodeController:
                 test_res = await self.test_ladder.run_targeted_test(v_test)
                 validation_results[f"{task.id}_test_{v_test}"] = test_res.status
 
-        # Phase 9: Arbitration & Proof Object
+            # Phase 9: Independent Critics (Security + Product Judgment LSC)
+            mission.state = MissionState.REVIEWING
+            from .security.invariants import ConcentricSecurityGate
+            from .critics.product import ProductJudgmentCritic
+
+            # 9a. Security invariant audit across mutated files
+            for m in exec_res.mutations:
+                code_content = m.get("content", "")
+                sec_violations = ConcentricSecurityGate.audit_code(code_content)
+                for sv in sec_violations:
+                    all_claims.append(
+                        Claim(
+                            id=f"sec_violation_{sv.violation_type}",
+                            statement=sv.message,
+                            severity=1.0,  # Critical blocking veto
+                            confidence=1.0,
+                            evidence=[f"file:{m.get('path', 'unknown')}", sv.matched_snippet],
+                        )
+                    )
+
+            # 9b. Product Judgment Critic (LSC evaluation)
+            product_critic = ProductJudgmentCritic(penalty_lambda=2.0)
+            combined_mutations_code = "\n".join(m.get("content", "") for m in exec_res.mutations)
+            lsc_res = product_critic.evaluate_inferred_requirements(
+                explicit_requirements=[task.objective],
+                source_code=combined_mutations_code,
+                context_evidence=["controller_task_execution"],
+            )
+            if lsc_res.hallucinated_count > 0:
+                all_claims.append(
+                    Claim(
+                        id=f"lsc_hallucination_{task.id}",
+                        statement=f"Detected {lsc_res.hallucinated_count} unsupported/hallucinated product additions.",
+                        severity=0.75,
+                        confidence=0.85,
+                        evidence=["product_judgment_critic"],
+                    )
+                )
+
+        # Phase 10: Arbitration & Proof Object
         mission.state = MissionState.ARBITRATING
         proof = self.arbiter.compile_proof(
             task_id=mission.mission_id,
@@ -130,3 +169,4 @@ class NouGenCodeController:
 
         mission.state = MissionState.VERIFIED if proof.result == "verified" else MissionState.BLOCKED
         return proof
+
