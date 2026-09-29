@@ -75,7 +75,8 @@ class TestLadder:
         """Level 1: Exact targeted test file execution."""
         t0 = time.time()
         tout = timeout_s or self.base_timeout_s
-        cmd = ["python3", "-m", "pytest", test_file]
+        import sys
+        cmd = [sys.executable, "-m", "pytest", test_file]
         env = dict(os.environ)
         env["PYTHONPATH"] = str(self.repo_root / "src")
 
