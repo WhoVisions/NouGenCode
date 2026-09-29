@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-import hashlib
-import json
+import math
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
@@ -62,6 +61,13 @@ class ShadowPolicyReplayer:
     """Replays historical traces against candidate policy rules to evaluate rollout safety."""
 
     def __init__(self, max_allowed_divergence: float = 0.05) -> None:
+        if (
+            isinstance(max_allowed_divergence, bool)
+            or not isinstance(max_allowed_divergence, (int, float))
+            or not 0.0 <= max_allowed_divergence <= 1.0
+            or not math.isfinite(max_allowed_divergence)
+        ):
+            raise ValueError("max_allowed_divergence must be a finite number from 0 to 1")
         self.max_allowed_divergence = max_allowed_divergence
         self._shadow_rules: Dict[str, PolicyRule] = {}
 
@@ -85,8 +91,10 @@ class ShadowPolicyReplayer:
                 allowed = rule.predicate(trace.payload)
                 if not allowed and rule.is_blocking:
                     violations.append(f"{r_id}:{rule.version}")
-            except Exception as exc:
-                violations.append(f"{r_id}:{rule.version}(err={exc})")
+            except Exception:
+                # Keep replay verdicts deterministic and avoid returning raw
+                # exception details that may contain input or credential data.
+                violations.append(f"{r_id}:{rule.version}(predicate_error)")
 
         shadow_verdict = len(violations) == 0
         is_divergent = shadow_verdict != trace.active_policy_verdict
@@ -112,7 +120,8 @@ class ShadowPolicyReplayer:
                 divergent_traces=0,
                 divergence_rate=0.0,
                 evaluations=(),
-                is_safe_for_rollout=True,
+                # Zero observations provide no evidence that a candidate is safe.
+                is_safe_for_rollout=False,
             )
 
         results: List[ShadowEvaluationResult] = []
