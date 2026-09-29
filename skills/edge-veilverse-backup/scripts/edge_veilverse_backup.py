@@ -2,14 +2,15 @@
 VeilVerse Universe Backup Tool
 Pulls all entities from OLD Notion workspace and stores in local SQLite.
 """
+import os
 import sqlite3
 import json
 from datetime import datetime
 from pathlib import Path
 from notion_client import Client
 
-# OLD Workspace credentials (Dave Meralus's Space)
-OLD_TOKEN = "ntn_Q30316993016t1Tl4w10dpwEk2yN3SB4PN9An9z71xJfrH"
+# OLD workspace credentials come from the environment; never hardcode them.
+OLD_TOKEN = os.environ.get("NOTION_OLD_WORKSPACE_TOKEN", "")
 OLD_DB_ID = "2d90b4b4-0f65-8001-98fe-cbf8a4a2146a"
 
 # Local backup path
