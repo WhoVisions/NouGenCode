@@ -1,53 +1,53 @@
-# ⚡ NouGenCode
+# NouGenCode
 
-**NouGenCode** is the NouGen fleet AST code cleaner, dead code scanner, and bloat sweeper with native 99% Context Mode guardrails and canonical 9-DB NouGenShards integration.
+NouGenCode combines repository analysis tools with a provider-neutral software
+engineering control plane. Persistent engineering roles describe responsibilities
+and safety contracts; replaceable providers declare capabilities and are selected
+by the Switchboard using capability fit and recorded competency.
 
----
+## Mission lifecycle
 
-## 🔒 Branch & Security Policy
-* **Protected Branch**: `main` (Direct pushes blocked; pull request review required).
-* **Zero Path Leaks**: Dynamic discovery only (`~/.nougen/shards`, `~/.nougen/context`). No hardcoded paths.
+The controller runs a bounded path from intent to a proof object:
 
+1. Context Gate preflight records the mission and searches relevant session context.
+2. Repository cartography maps the checkout and its targeted tests.
+3. Task graph validation rejects missing dependencies and cycles before provider work.
+4. The Switchboard chooses a capable provider for each role capability.
+5. The fanout governor bounds each runnable wave; the default is one task at a time.
+6. Mutation budgets check file scope and reported added/deleted line counts.
+7. The test ladder runs syntax checks and explicit targeted tests, classifying timeouts as unknown.
+8. Security and product critics review provider mutation evidence.
+9. The Evidence Arbiter issues the verified or rejected proof with immutable, content-addressed receipts.
+10. Optional Tracker and Shards/Relay adapters receive a compact postflight checkpoint without source text.
 
-## 🎯 Purpose & Scope
+Tracker and Shards/Relay integrations are injected through adapter interfaces. If no
+adapter is configured, the proof reports that status as not configured; it does
+not claim a receipt was published.
 
-1. **AST Dead Code & Unused Symbol Detection**:
-   * Scans Python source code using standard AST to detect unreferenced local imports (`UNUSED_IMPORT`).
-   * Detects dead private/internal helper functions and classes (`UNUSED_FUNCTION`, `UNUSED_CLASS`).
-2. **Orphan Root Script Sweeper**:
-   * Identifies unreferenced scratch, temp, and ad-hoc prototype scripts (`ORPHAN_FILE`) across repository roots.
-3. **Dependency & Bloat Audit**:
-   * Cross-references declared dependencies in `requirements.txt` against active imports (`UNUSED_DEPENDENCY`).
-4. **Shard Audit Logging**:
-   * Exports scan telemetry directly into NouGen FTS5 Shard memory (`--save-shard`).
+## Dynamic context paths
 
----
+The NOUGEN_CONTEXT_DIR environment variable can select a context store. Otherwise
+the Context Gate resolves the current user's home directory at runtime and uses its
+NouGen context folder. NouGenCode does not embed a tenant, account, user folder,
+machine, or repository path.
 
-## 🚀 Usage
+## Repository analysis CLI
 
-### 1. Basic Scan
-```bash
-# Scan current repository
-nougencode
+The existing scanner CLI remains available:
 
-# Scan specific path or file
-nougencode ./path/to/project
-nougencode ./scripts/worker.py
-```
+    nougencode
+    nougencode ./path/to/project
+    nougencode ./scripts/worker.py
+    nougencode --json
+    nougencode --save-shard
+    nougencode --no-deps
+    nougencode --no-orphans
+    nougencode --no-ast
 
-### 2. Output as JSON
-```bash
-nougencode --json
-```
+## Development
 
-### 3. Record Audit Receipt into NouGen Shards
-```bash
-nougencode --save-shard
-```
+Install the package in editable mode, then run focused tests with the source tree
+available on PYTHONPATH:
 
-### 4. Selective Toggles
-```bash
-nougencode --no-deps      # Skip requirements.txt scanning
-nougencode --no-orphans   # Skip root scratch script checking
-nougencode --no-ast       # Skip AST deadcode scanner
-```
+    python -m pip install -e .
+    PYTHONPATH=src python -m pytest tests/test_nougencode_control_plane.py

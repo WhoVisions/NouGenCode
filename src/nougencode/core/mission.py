@@ -2,8 +2,6 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-import hashlib
-import json
 import time
 from typing import Any, Dict, List, Optional, Set
 
@@ -54,7 +52,7 @@ class RuntimeIdentity:
     machine_id: str
     repo_id: str
     session_id: str
-    branch: str = "main"
+    branch: Optional[str] = None
     provider_id: Optional[str] = None
     agent_id: Optional[str] = None
 
@@ -78,11 +76,12 @@ class MutationBudget:
     allowed_roots: List[str] = field(default_factory=list)
     forbidden_roots: List[str] = field(default_factory=list)
 
-    def evaluate_drift(self, files_changed: int, lines_added: int) -> float:
+    def evaluate_drift(self, files_changed: int, lines_added: int, lines_deleted: int = 0) -> float:
         """Computes mutation drift ratio against budget."""
         file_drift = files_changed / max(1, self.max_files)
-        line_drift = lines_added / max(1, self.max_added_lines)
-        return max(file_drift, line_drift)
+        added_drift = lines_added / max(1, self.max_added_lines)
+        deleted_drift = lines_deleted / max(1, self.max_deleted_lines)
+        return max(file_drift, added_drift, deleted_drift)
 
 
 @dataclass
@@ -97,6 +96,8 @@ class TaskNode:
     mutation_budget: Optional[MutationBudget] = None
     validation: List[str] = field(default_factory=list)
     completed: bool = False
+    attempted: bool = False
+    execution_status: Optional[str] = None
     evidence: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -123,5 +124,38 @@ class CodeMission:
         completed_ids = {t.id for t in self.task_graph if t.completed}
         return [
             t for t in self.task_graph
-            if not t.completed and all(dep in completed_ids for dep in t.dependencies)
+            if not t.completed and not t.attempted and all(dep in completed_ids for dep in t.dependencies)
         ]
+
+    def task_graph_errors(self) -> List[str]:
+        """Return deterministic structural errors before a provider can mutate the repo."""
+        ids = [task.id for task in self.task_graph]
+        errors: List[str] = []
+        duplicates = sorted({task_id for task_id in ids if ids.count(task_id) > 1})
+        if duplicates:
+            errors.append("duplicate task ids: " + ", ".join(duplicates))
+        known = set(ids)
+        for task in self.task_graph:
+            missing = sorted(set(task.dependencies) - known)
+            if missing:
+                errors.append(f"{task.id} has missing dependencies: " + ", ".join(missing))
+
+        # Kahn's algorithm detects cycles without depending on input ordering.
+        remaining = {task.id: set(task.dependencies) & known for task in self.task_graph}
+        ready = sorted(task_id for task_id, deps in remaining.items() if not deps)
+        visited: Set[str] = set()
+        while ready:
+            task_id = ready.pop(0)
+            if task_id in visited:
+                continue
+            visited.add(task_id)
+            for other_id in sorted(remaining):
+                if task_id in remaining[other_id]:
+                    remaining[other_id].remove(task_id)
+                    if not remaining[other_id] and other_id not in visited:
+                        ready.append(other_id)
+                        ready.sort()
+        cyclic = sorted(set(remaining) - visited)
+        if cyclic:
+            errors.append("task dependency cycle: " + ", ".join(cyclic))
+        return errors

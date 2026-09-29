@@ -1,10 +1,11 @@
 """Evidence arbiter, claims, disagreement graph, and proof object compilation."""
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import hashlib
 import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from nougencode.routing.switchboard import ExecutionStatus
 
@@ -27,6 +28,26 @@ class Claim:
         return not self.resolved and self.severity >= 0.7 and len(self.evidence) > 0
 
 
+@dataclass(frozen=True)
+class EvidenceReceipt:
+    """Immutable content-addressed evidence reference without copying raw payloads."""
+
+    stage: str
+    source: str
+    sha256: str
+    observed_at: str
+
+    @classmethod
+    def from_payload(cls, stage: str, source: str, payload: Any) -> "EvidenceReceipt":
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return cls(
+            stage=stage,
+            source=source,
+            sha256=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+            observed_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
 @dataclass
 class ProofObject:
     """Formal proof object verifying repository mutation state."""
@@ -37,6 +58,7 @@ class ProofObject:
     validation: Dict[str, str] = field(default_factory=dict)
     reviews: Dict[str, str] = field(default_factory=dict)
     unresolved_claims: List[str] = field(default_factory=list)
+    evidence_receipts: tuple[EvidenceReceipt, ...] = ()
     result: str = "verified"  # verified, rejected, replan
     timestamp: float = field(default_factory=time.time)
 
@@ -49,6 +71,7 @@ class ProofObject:
             "validation": self.validation,
             "reviews": self.reviews,
             "unresolved_claims": self.unresolved_claims,
+            "evidence_receipts": [receipt.__dict__ for receipt in self.evidence_receipts],
             "result": self.result,
             "timestamp": self.timestamp,
         }
@@ -82,6 +105,7 @@ class EvidenceArbiter:
         mutations: List[Dict[str, Any]],
         validation_results: Dict[str, ExecutionStatus],
         claims: List[Claim],
+        evidence_receipts: tuple[EvidenceReceipt, ...] = (),
     ) -> ProofObject:
         """Compiles canonical proof object."""
         can_ship = self.evaluate_claims(claims)
@@ -102,5 +126,6 @@ class EvidenceArbiter:
             validation=val_summary,
             reviews={"security": "pass" if can_ship else "blocked"},
             unresolved_claims=unresolved,
+            evidence_receipts=evidence_receipts,
             result=result_verdict,
         )

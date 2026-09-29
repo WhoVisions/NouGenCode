@@ -44,6 +44,15 @@ class TestLadder:
     async def run_syntax_check(self, files: List[str]) -> TestLadderResult:
         """Level 0: Syntax / Compilation check via py_compile."""
         t0 = time.time()
+        missing = [f for f in files if Path(f).suffix == ".py" and not (self.repo_root / f).is_file()]
+        if missing:
+            return TestLadderResult(
+                level=TestLevel.LEVEL_0_SYNTAX,
+                status=ExecutionStatus.FAIL,
+                command="py_compile",
+                output="Expected Python files are missing: " + ", ".join(sorted(missing)),
+                duration_s=time.time() - t0,
+            )
         for f in files:
             full_path = self.repo_root / f
             if full_path.suffix == ".py" and full_path.exists():

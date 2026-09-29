@@ -4,11 +4,11 @@ Comprehensive test suite verifying NouGenCode architecture.
 
 from __future__ import annotations
 
-from pathlib import Path
+from dataclasses import fields
 import pytest
 
 from nougencode.discovery.waterflow import WaterflowDiscovery
-from nougencode.roles.contracts import ROLE_REGISTRY, EngineeringRole
+from nougencode.roles.contracts import ROLE_REGISTRY, EngineeringRole, RoleContract
 from nougencode.router.empirical_router import EmpiricalProviderRouter, TaskSpecification
 from nougencode.security.invariants import ConcentricSecurityGate
 
@@ -26,6 +26,8 @@ def test_waterflow_hardware_and_provider_discovery():
 
 
 def test_engineering_role_contracts():
+    contract_fields = {field.name for field in fields(RoleContract)}
+    assert not contract_fields.intersection({"provider_id", "provider_name", "model_id"})
     for role in EngineeringRole:
         contract = ROLE_REGISTRY.get(role)
         assert contract is not None

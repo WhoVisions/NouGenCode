@@ -5,9 +5,13 @@ from typing import Any, Dict
 import pytest
 
 from nougencode.arbitration.arbiter import Claim, EvidenceArbiter
+from nougencode.context_gate import ContextGate
 from nougencode.controller import NouGenCodeController
+from nougencode.core.checkpoint import MissionCheckpoint
+from nougencode.core.fanout import FanoutGovernor
 from nougencode.core.mission import (
     Capability,
+    CodeMission,
     Intent,
     MutationBudget,
     RuntimeIdentity,
@@ -19,7 +23,7 @@ from nougencode.routing.switchboard import (
     ProviderResult,
     Switchboard,
 )
-from nougencode.validation.test_ladder import TestLadder, TestLevel
+from nougencode.validation.test_ladder import TestLadder
 
 
 class MockCodeProvider(CodeProvider):
@@ -37,7 +41,13 @@ class MockCodeProvider(CodeProvider):
         return ProviderResult(
             status=self.default_status,
             output="Executed mock successfully",
-            mutations=[{"file": f, "status": "modified"} for f in task.files_expected],
+            mutations=[{
+                "file": f,
+                "status": "modified",
+                "lines_added": 2,
+                "lines_deleted": 0,
+                "content": "def parse_args():\n    return []",
+            } for f in task.files_expected],
             latency_ms=12,
             tokens_used=42,
         )
@@ -77,6 +87,78 @@ def test_switchboard_role_decoupling_and_competence():
 
     best = sb.resolve(Capability.DEBUGGING, task)
     assert best.provider_id == "provider_b"
+
+
+def test_switchboard_equal_scores_use_process_stable_provider_order():
+    task = TaskNode(id="t1", objective="inspect", capability=Capability.DEBUGGING)
+    first = Switchboard()
+    second = Switchboard()
+    providers = [
+        MockCodeProvider("provider_z", [Capability.DEBUGGING]),
+        MockCodeProvider("provider_a", [Capability.DEBUGGING]),
+    ]
+    for provider in providers:
+        first.register_provider(provider)
+    for provider in reversed(providers):
+        second.register_provider(provider)
+
+    assert first.resolve(Capability.DEBUGGING, task).provider_id == "provider_a"
+    assert second.resolve(Capability.DEBUGGING, task).provider_id == "provider_a"
+
+
+def test_fanout_governor_selects_a_stable_bounded_wave():
+    governor = FanoutGovernor(max_parallel_tasks=2)
+
+    assert governor.select_wave(["one", "two", "three"]) == ("one", "two")
+    with pytest.raises(ValueError, match="at least one"):
+        FanoutGovernor(max_parallel_tasks=0)
+
+
+def test_mutation_budget_enforces_checkout_and_declared_roots(tmp_path):
+    controller = NouGenCodeController(
+        repo_root=str(tmp_path),
+        switchboard=Switchboard(),
+        context_gate=ContextGate(context_dir=tmp_path / "context"),
+    )
+    task = TaskNode(
+        id="scoped",
+        objective="edit source",
+        mutation_budget=MutationBudget(allowed_roots=["src"], forbidden_roots=["src/generated"]),
+    )
+
+    assert controller._mutation_scope_violations(task, [{"file": "src/module.py"}]) == 0
+    assert controller._mutation_scope_violations(task, [{"file": "tests/test_module.py"}]) == 1
+    assert controller._mutation_scope_violations(task, [{"file": "../outside.py"}]) == 1
+    assert controller._mutation_scope_violations(task, [{"file": "src/generated/output.py"}]) == 1
+
+
+def test_syntax_ladder_rejects_missing_expected_source(tmp_path):
+    async def _run():
+        result = await TestLadder(str(tmp_path)).run_syntax_check(["src/missing.py"])
+        assert result.status == ExecutionStatus.FAIL
+        assert "src/missing.py" in result.output
+
+    asyncio.run(_run())
+
+
+def test_task_graph_rejects_missing_dependencies_and_cycles():
+    identity = RuntimeIdentity("tenant", "workspace", "machine", "repo", "session")
+    intent = Intent(goal="check graph")
+    mission = CodeMission(
+        mission_id="mission",
+        identity=identity,
+        intent=intent,
+        baseline_commit="head",
+        task_graph=[
+            TaskNode(id="one", objective="one", dependencies=["two"]),
+            TaskNode(id="two", objective="two", dependencies=["one"]),
+        ],
+    )
+
+    assert mission.task_graph_errors() == ["task dependency cycle: one, two"]
+
+    mission.task_graph[0].dependencies = ["missing"]
+    assert mission.task_graph_errors() == ["one has missing dependencies: missing"]
 
 
 def test_mutation_drift_budget():
@@ -127,11 +209,42 @@ def test_timeout_is_not_failure():
 def test_full_controller_mission_lifecycle(tmp_path):
     """End-to-end verification of NouGenCode control plane execution."""
     async def _run():
+        source = tmp_path / "src" / "parser.py"
+        source.parent.mkdir(parents=True)
+        source.write_text("def parse_args():\n    return []\n", encoding="utf-8")
+        test_file = tmp_path / "tests" / "test_parser.py"
+        test_file.parent.mkdir()
+        test_file.write_text(
+            "from parser import parse_args\n\ndef test_parse_args():\n    assert parse_args() == []\n",
+            encoding="utf-8",
+        )
+
+        class Feedback:
+            checkpoint = None
+
+            def record_checkpoint(self, checkpoint: MissionCheckpoint):
+                self.checkpoint = checkpoint
+
+        class Capture:
+            checkpoint = None
+
+            def capture_checkpoint(self, checkpoint: MissionCheckpoint):
+                self.checkpoint = checkpoint
+
+        feedback = Feedback()
+        capture = Capture()
         sb = Switchboard()
         provider = MockCodeProvider("lantern_local", [Capability.IMPLEMENTATION])
         sb.register_provider(provider)
 
-        controller = NouGenCodeController(repo_root=str(tmp_path), switchboard=sb)
+        controller = NouGenCodeController(
+            repo_root=str(tmp_path),
+            switchboard=sb,
+            context_gate=ContextGate(context_dir=tmp_path / "context"),
+            fanout_governor=FanoutGovernor(max_parallel_tasks=2),
+            tracker_feedback=feedback,
+            postflight_capture=capture,
+        )
         identity = RuntimeIdentity(
             tenant_id="tenant_42",
             workspace_id="ws_main",
@@ -150,6 +263,7 @@ def test_full_controller_mission_lifecycle(tmp_path):
             capability=Capability.IMPLEMENTATION,
             files_expected=["src/parser.py"],
             mutation_budget=MutationBudget(max_files=1, max_added_lines=20),
+            validation=["tests/test_parser.py"],
         )
 
         proof = await controller.execute_mission(
@@ -162,5 +276,18 @@ def test_full_controller_mission_lifecycle(tmp_path):
         assert proof.task_id.startswith("mission_")
         assert proof.result == "verified"
         assert proof.schema == "nougen.code.proof.v1"
+        assert proof.mutations[0]["file"] == "src/parser.py"
+        assert proof.validation["task_fix_syntax"] == ExecutionStatus.PASS.value
+        assert proof.validation["task_fix_test_tests/test_parser.py"] == ExecutionStatus.PASS.value
+        assert {receipt.stage for receipt in proof.evidence_receipts} >= {
+            "preflight", "cartography", "planning", "execution", "validation", "postflight",
+        }
+        assert proof.reviews["tracker_feedback"] == "recorded"
+        assert proof.reviews["shards_relay_postflight"] == "captured"
+        assert feedback.checkpoint is capture.checkpoint
+
+        from dataclasses import FrozenInstanceError
+        with pytest.raises(FrozenInstanceError):
+            proof.evidence_receipts[0].sha256 = "changed"
 
     asyncio.run(_run())
