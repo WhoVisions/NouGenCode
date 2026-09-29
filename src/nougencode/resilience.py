@@ -153,20 +153,28 @@ def _hash(value: Any) -> str:
 
 
 def _score_hypotheses(evidence: Sequence[Evidence]) -> tuple[dict[str, float], int]:
-    scores: dict[str, float] = {}
+    # Correlated evidence gets one vote: within an independent group only the
+    # strongest support and strongest contradiction count, so ten telemetry rows
+    # from one source family cannot outscore two independent observations.
+    # Evidence without a group is its own group.
+    support: dict[tuple[str, str], float] = {}
+    penalty: dict[tuple[str, str], float] = {}
     attack_groups: set[str] = set()
     for item in sorted(evidence, key=lambda row: (row.source, row.evidence_id)):
         reliability = min(1.0, max(0.0, item.reliability))
         freshness = min(1.0, max(0.0, item.freshness))
+        group = item.independent_group or f"_solo:{item.source}:{item.evidence_id}"
         for hypothesis, specificity in sorted(item.specificity.items()):
             contribution = reliability * freshness * min(1.0, max(0.0, specificity))
-            scores[hypothesis] = max(
-                0.0,
-                scores.get(hypothesis, 0.0) + contribution - max(0.0, item.contradiction_penalty),
-            )
+            key = (hypothesis, group)
+            support[key] = max(support.get(key, 0.0), contribution)
+            penalty[key] = max(penalty.get(key, 0.0), max(0.0, item.contradiction_penalty))
             if hypothesis == "hostile_action" and contribution > 0 and item.independent_group:
                 attack_groups.add(item.independent_group)
-    return {key: round(value, 12) for key, value in sorted(scores.items())}, len(attack_groups)
+    scores: dict[str, float] = {}
+    for (hypothesis, _group), value in sorted(support.items()):
+        scores[hypothesis] = scores.get(hypothesis, 0.0) + value - penalty[(hypothesis, _group)]
+    return {key: round(max(0.0, value), 12) for key, value in sorted(scores.items())}, len(attack_groups)
 
 
 def _is_fresh(observed_at: str, ttl_seconds: int, evaluated_at: str) -> bool:
