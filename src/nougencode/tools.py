@@ -33,10 +33,22 @@ class ToolExecutor:
     def write_file(self, file_path: str, content: str) -> str:
         target = (self.root_dir / file_path).resolve()
         try:
+            # Auto-fix Python syntax errors before code touches disk
+            heal_notice = ""
+            if file_path.endswith(".py"):
+                from .fabric.syntax_guard import SyntaxHealer
+                res = SyntaxHealer.heal(content, filename=file_path)
+                if res.was_corrupt:
+                    if res.repaired:
+                        content = res.healed_code
+                        heal_notice = f" [Auto-healed syntax: {', '.join(res.repairs_applied)}]"
+                    else:
+                        return f"Error: SyntaxError prevented write to {file_path}: {res.error}"
+
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
             self.context_gate.log_event(f"write_file:{file_path}", content, {"lines": len(content.splitlines())})
-            return f"Successfully wrote {len(content.splitlines())} lines to {file_path}"
+            return f"Successfully wrote {len(content.splitlines())} lines to {file_path}{heal_notice}"
         except Exception as e:
             return f"Error writing file: {e}"
 
