@@ -79,6 +79,8 @@ def test_builtin_postflight_captures_shard_and_only_checkpoints_active_relay(
         observed_at="2026-09-29T00:00:00+00:00",
         provider_ids=("provider_fixture",),
         evidence_receipts=(),
+        machine_id="chatgpt-app",
+        agent_id="g-whoentertains",
     )
     adapter = NouGenPostflightCapture()
     assert adapter.capture_checkpoint(checkpoint) == (
@@ -110,6 +112,35 @@ def test_builtin_postflight_captures_shard_and_only_checkpoints_active_relay(
     assert "shell" not in kwargs
     assert kwargs["cwd"] == tmp_path
     assert "completion remains provisional" in command[-1]
+    assert kwargs["env"]["NOUGEN_MACHINE"] == "chatgpt-app"
+    assert kwargs["env"]["NOUGEN_AGENT"] == "g-whoentertains"
+
+
+def test_relay_projection_success_is_reported_when_local_push_diverges(monkeypatch, tmp_path):
+    from nougencode.integrations.nougen_postflight import _checkpoint_relay
+
+    monkeypatch.setenv("NOUGEN_RELAY_DIR", str(tmp_path))
+
+    class PublishedButDiverged:
+        returncode = 1
+        stdout = "published registry projection, but push of local commit failed"
+        stderr = ""
+
+    monkeypatch.setattr(
+        "nougencode.integrations.nougen_postflight.subprocess.run",
+        lambda *args, **kwargs: PublishedButDiverged(),
+    )
+    checkpoint = MissionCheckpoint(
+        mission_id="mission_fixture",
+        result="in_progress",
+        observed_at="2026-09-29T00:00:00+00:00",
+        provider_ids=(),
+        evidence_receipts=(),
+        relay_leg_id="leg_fixture",
+    )
+    assert _checkpoint_relay(checkpoint) == (
+        "relay:checkpointed_in_progress_registry_published_local_diverged"
+    )
 
 
 class MockCodeProvider(CodeProvider):

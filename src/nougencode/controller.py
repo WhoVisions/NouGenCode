@@ -489,6 +489,8 @@ class NouGenCodeController:
             latency_ms=latency_ms,
             tokens_used=tokens_used,
             relay_leg_id=identity.relay_leg_id,
+            machine_id=identity.machine_id,
+            agent_id=identity.agent_id,
         )
         try:
             self.tracker_feedback.record_checkpoint(checkpoint)

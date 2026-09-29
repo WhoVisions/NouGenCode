@@ -20,6 +20,8 @@ class MissionCheckpoint:
     latency_ms: int = 0
     tokens_used: int = 0
     relay_leg_id: Optional[str] = None
+    machine_id: Optional[str] = None
+    agent_id: Optional[str] = None
 
 
 class TrackerFeedback(Protocol):

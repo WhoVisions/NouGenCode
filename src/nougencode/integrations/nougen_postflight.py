@@ -64,6 +64,10 @@ def _checkpoint_relay(checkpoint: MissionCheckpoint) -> str:
         return "relay:unknown_unreachable"
 
     env = os.environ.copy()
+    if checkpoint.machine_id:
+        env["NOUGEN_MACHINE"] = checkpoint.machine_id
+    if checkpoint.agent_id:
+        env["NOUGEN_AGENT"] = checkpoint.agent_id
     relay_src = relay_root / "src"
     current_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = os.pathsep.join(
@@ -87,6 +91,9 @@ def _checkpoint_relay(checkpoint: MissionCheckpoint) -> str:
         check=False,
     )
     if completed.returncode:
+        output = f"{completed.stdout or ''}\n{completed.stderr or ''}"
+        if "published registry projection, but push of local commit failed" in output:
+            return "relay:checkpointed_in_progress_registry_published_local_diverged"
         return f"relay:unknown_exit_{completed.returncode}"
     return "relay:checkpointed_in_progress"
 
