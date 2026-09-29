@@ -111,15 +111,19 @@ class SkillRegistry:
     def reload(self) -> None:
         self.skills.clear()
         for root in self.roots:
-            for skill_file in root.rglob("SKILL.md"):
-                try:
-                    content = skill_file.read_text(encoding="utf-8", errors="replace")
-                    meta, body = parse_frontmatter(content)
-                    name = meta.get("name") or skill_file.parent.name
-                    desc = meta.get("description", "")
-                    self.skills[name] = Skill(name=name, description=desc, path=skill_file, body=body)
-                except Exception:
-                    continue
+            if not root.exists():
+                continue
+            for dirpath, _, filenames in os.walk(root):
+                if "SKILL.md" in filenames:
+                    skill_file = Path(dirpath) / "SKILL.md"
+                    try:
+                        content = skill_file.read_text(encoding="utf-8", errors="replace")
+                        meta, body = parse_frontmatter(content)
+                        name = meta.get("name") or skill_file.parent.name
+                        desc = meta.get("description", "")
+                        self.skills[name] = Skill(name=name, description=desc, path=skill_file, body=body)
+                    except Exception:
+                        continue
 
     def list_skills(self) -> List[Skill]:
         return sorted(self.skills.values(), key=lambda s: s.name)

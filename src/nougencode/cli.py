@@ -41,6 +41,13 @@ def main() -> int:
     p_golden = subparsers.add_parser("golden-slice", help="Assess a provenance-carrying evidence request and print a proof envelope")
     p_golden.add_argument("request_path", type=Path, help="Path to a golden-slice request JSON file")
 
+    p_fabric = subparsers.add_parser("change-fabric", help="Validate change contract and execute trustworthy change fabric")
+    p_fabric.add_argument("--session-id", default="session-cli", help="Session ID")
+    p_fabric.add_argument("--contract-id", default="CC-CLI-001", help="Contract ID")
+    p_fabric.add_argument("--files", nargs="*", default=[], help="Modified files")
+    p_fabric.add_argument("--lines", type=int, default=0, help="Lines changed")
+    p_fabric.add_argument("--json", action="store_true", help="Output summary as JSON")
+
     # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
@@ -138,6 +145,61 @@ def main() -> int:
             sys.stderr.write(f"Golden-slice request invalid: {exc}\n")
             return 2
         return 0
+
+    if args.subcommand == "change-fabric":
+        import json
+
+        from .fabric import ChangeContract, FunctionalRequirement, ReviewConstraint, ChangeFabricEngine
+
+        contract = ChangeContract(
+            contract_id=args.contract_id,
+            title="CLI Change Fabric Invocation",
+            functional_requirements=(
+                FunctionalRequirement(
+                    req_id="FR-CLI",
+                    description="Autonomous change execution",
+                    target_artifacts=tuple(args.files) if args.files else ("src/nougencode/cli.py",),
+                    invariants=("DETERMINISTIC_PROOF",),
+                    acceptance_tests=(),
+                ),
+            ),
+            review_constraints=ReviewConstraint(
+                constraint_id="RC-CLI",
+                max_mutation_files=20,
+                max_mutation_lines=2000,
+                required_reviewers=("Apollo",),
+                forbidden_patterns=(),
+            ),
+        )
+
+        engine = ChangeFabricEngine()
+        result = engine.execute_change_cycle(
+            session_id=args.session_id,
+            contract=contract,
+            modified_files=args.files,
+            lines_changed=args.lines,
+        )
+
+        if args.json:
+            print(json.dumps({
+                "status": result.status,
+                "session_id": result.session_id,
+                "contract_id": result.contract_id,
+                "receipt_hash": result.receipt_hash,
+                "coherence_debt": result.coherence_report.coherence_debt_score,
+                "route": {
+                    "provider": result.route_decision.selected_provider_id,
+                    "model": result.route_decision.selected_model_id,
+                },
+                "mutation_valid": result.mutation_valid,
+            }, indent=2))
+        else:
+            print(f"Change Fabric Execution: [{result.status}]")
+            print(f"  Receipt Hash: {result.receipt_hash}")
+            print(f"  Coherence Debt: {result.coherence_report.coherence_debt_score}")
+            print(f"  Route: {result.route_decision.selected_provider_id} -> {result.route_decision.selected_model_id}")
+            print(f"  Mutation Valid: {result.mutation_valid}")
+        return 0 if result.status == "ACCEPTED" else 1
 
     target_path = Path(args.path).resolve()
 
