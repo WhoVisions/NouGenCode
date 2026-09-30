@@ -131,8 +131,13 @@ class DirectiveReceipt:
         }
 
     def has_valid_output_hash(self) -> bool:
-        """Check that the immutable evidence still matches its receipt hash."""
-        payload = {"plan_hash": self.plan_hash, "runtime_evidence": self.runtime_evidence}
+        """Check that the receipt verdict and evidence match its output hash."""
+        payload = {
+            "plan_hash": self.plan_hash,
+            "directive_type": self.directive_type.value,
+            "success": self.success,
+            "runtime_evidence": self.runtime_evidence,
+        }
         expected = sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
         return isinstance(self.output_hash, str) and hmac.compare_digest(expected, self.output_hash)
 
@@ -320,7 +325,7 @@ class DirectiveOrchestrator:
                 "completion_state": "unconfigured",
                 "remaining_work": "Register an executor; no work was performed.",
             }
-            out_hash = self._evidence_hash(plan_hash, evidence)
+            out_hash = self._evidence_hash(plan_hash, plan.directive_type, False, evidence)
             return DirectiveReceipt(
                 plan_hash=plan_hash,
                 directive_type=plan.directive_type,
@@ -343,7 +348,7 @@ class DirectiveOrchestrator:
                     "remaining_work",
                     "Verify the result and provide verification_method, verification_passed, and evidence_refs.",
                 )
-            out_hash = self._evidence_hash(plan_hash, evidence)
+            out_hash = self._evidence_hash(plan_hash, plan.directive_type, verified, evidence)
             return DirectiveReceipt(
                 plan_hash=plan_hash,
                 directive_type=plan.directive_type,
@@ -362,7 +367,7 @@ class DirectiveOrchestrator:
                 "completion_state": "failed",
                 "remaining_work": "Inspect protected diagnostics and retry only after the cause is understood.",
             }
-            out_hash = self._evidence_hash(plan_hash, err_evidence)
+            out_hash = self._evidence_hash(plan_hash, plan.directive_type, False, err_evidence)
             return DirectiveReceipt(
                 plan_hash=plan_hash,
                 directive_type=plan.directive_type,
@@ -393,9 +398,19 @@ class DirectiveOrchestrator:
         )
 
     @staticmethod
-    def _evidence_hash(plan_hash: str, evidence: Mapping[str, Any]) -> str:
-        """Bind the receipt hash to its plan and stable, canonical evidence."""
-        payload = {"plan_hash": plan_hash, "runtime_evidence": evidence}
+    def _evidence_hash(
+        plan_hash: str,
+        directive_type: DirectiveType,
+        success: bool,
+        evidence: Mapping[str, Any],
+    ) -> str:
+        """Bind the receipt hash to its plan, verdict, type, and evidence."""
+        payload = {
+            "plan_hash": plan_hash,
+            "directive_type": directive_type.value,
+            "success": success,
+            "runtime_evidence": evidence,
+        }
         return sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
     @classmethod

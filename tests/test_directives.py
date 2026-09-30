@@ -241,6 +241,22 @@ def test_receipt_output_hash_can_be_checked_after_creation():
         output_hash="0" * 64,
     )
     assert not inconsistent.has_valid_output_hash()
+    changed_verdict = DirectiveReceipt(
+        plan_hash=receipt.plan_hash,
+        directive_type=receipt.directive_type,
+        success=not receipt.success,
+        runtime_evidence=receipt.runtime_evidence,
+        output_hash=receipt.output_hash,
+    )
+    changed_type = DirectiveReceipt(
+        plan_hash=receipt.plan_hash,
+        directive_type=DirectiveType.RELAY,
+        success=receipt.success,
+        runtime_evidence=receipt.runtime_evidence,
+        output_hash=receipt.output_hash,
+    )
+    assert not changed_verdict.has_valid_output_hash()
+    assert not changed_type.has_valid_output_hash()
 
 
 def test_non_json_handler_evidence_fails_closed_without_serialization_details():
