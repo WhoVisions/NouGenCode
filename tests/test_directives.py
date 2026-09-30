@@ -30,7 +30,10 @@ def test_compiler_recognizes_core_vocabulary():
         assert plan.directive_type == expected_type, f"Failed on '{text}'"
         assert plan.target_subsystem == expected_subsystem
         assert plan.idempotency_key is not None
-        assert len(plan.constraints) == 3
+        assert {item.name for item in plan.constraints} >= {
+            "dispatch_is_not_completion",
+            "completion_requires_verification",
+        }
 
 
 def test_plan_hash_is_invariant_and_deterministic():
@@ -43,18 +46,22 @@ def test_plan_hash_is_invariant_and_deterministic():
     assert plan1.idempotency_key == plan2.idempotency_key
 
 
-def test_orchestrator_execution_and_receipt():
+def test_unconfigured_orchestrator_does_not_claim_dispatch_or_completion():
     plan = DirectiveCompiler.parse("relay task to peer node")
     orchestrator = DirectiveOrchestrator()
 
     receipt = orchestrator.execute(plan)
-    assert receipt.success
+    assert not receipt.success
     assert receipt.directive_type == DirectiveType.RELAY
-    assert receipt.runtime_evidence["dispatched"] is True
+    assert receipt.runtime_evidence["dispatched"] is False
+    assert receipt.runtime_evidence["execution_attempted"] is False
+    assert receipt.runtime_evidence["status"] == "not_configured"
+    assert receipt.runtime_evidence["completion_state"] == "unconfigured"
+    assert "no work was performed" in receipt.runtime_evidence["remaining_work"]
     assert len(receipt.output_hash) == 64
 
 
-def test_orchestrator_custom_handler():
+def test_handler_return_without_verification_remains_provisional():
     plan = DirectiveCompiler.parse("shard memory 42")
     orchestrator = DirectiveOrchestrator()
 
@@ -64,6 +71,129 @@ def test_orchestrator_custom_handler():
     orchestrator.register_handler(DirectiveType.SHARD, mock_shard_handler)
     receipt = orchestrator.execute(plan)
 
-    assert receipt.success
+    assert not receipt.success
     assert receipt.runtime_evidence["sharded_id"] == 42
     assert receipt.runtime_evidence["status"] == "persisted"
+    assert receipt.runtime_evidence["completion_state"] == "unverified"
+    assert "verification_method" in receipt.runtime_evidence["remaining_work"]
+
+
+def test_handler_with_explicit_verification_evidence_can_complete():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator()
+
+    def verified_handler(p: DirectivePlan):
+        return {
+            "sharded_id": 42,
+            "status": "persisted",
+            "completed": True,
+            "verification_passed": True,
+            "verification_method": "read-after-write",
+            "evidence_refs": ["shard:db1:42"],
+        }
+
+    orchestrator.register_handler(DirectiveType.SHARD, verified_handler)
+    receipt = orchestrator.execute(plan)
+
+    assert receipt.success
+    assert receipt.runtime_evidence["completion_state"] == "verified"
+    assert receipt.runtime_evidence["evidence_refs"] == ["shard:db1:42"]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"completed": True},
+        {"completed": True, "verification_passed": True},
+        {"completed": True, "verification_passed": True, "verification_method": "read-after-write"},
+        {
+            "completed": True,
+            "verification_passed": 1,
+            "verification_method": "read-after-write",
+            "evidence_refs": ["shard:db1:42"],
+        },
+        {
+            "completed": True,
+            "verification_passed": True,
+            "verification_method": "read-after-write",
+            "evidence_refs": [" "],
+        },
+    ],
+)
+def test_incomplete_or_malformed_proof_never_marks_success(overrides):
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator()
+    orchestrator.register_handler(DirectiveType.SHARD, lambda _: overrides)
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["completion_state"] == "unverified"
+
+
+def test_handler_exception_does_not_copy_raw_diagnostic_into_receipt():
+    private_marker = "private provider response: synthetic-secret-marker"
+    plan = DirectiveCompiler.parse("relay task to peer node")
+    orchestrator = DirectiveOrchestrator()
+
+    def failing_handler(_):
+        raise RuntimeError(private_marker)
+
+    orchestrator.register_handler(DirectiveType.RELAY, failing_handler)
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["status"] == "failed"
+    assert receipt.runtime_evidence["completion_state"] == "failed"
+    assert receipt.runtime_evidence["error_type"] == "RuntimeError"
+    assert "protected diagnostics" in receipt.runtime_evidence["remaining_work"]
+    assert private_marker not in repr(receipt)
+
+
+@pytest.mark.parametrize(
+    "sensitive_key",
+    ["error_message", "access_token", "api_key", "private_key"],
+)
+def test_handler_receipt_redacts_nested_diagnostic_and_credential_fields(sensitive_key):
+    private_marker = "synthetic-secret-marker"
+    plan = DirectiveCompiler.parse("relay task to peer node")
+    orchestrator = DirectiveOrchestrator()
+    proof = {
+        "completed": True,
+        "verification_passed": True,
+        "verification_method": "read-after-write",
+        "evidence_refs": ["relay:leg:42"],
+        "metadata": {sensitive_key: private_marker},
+    }
+    orchestrator.register_handler(DirectiveType.RELAY, lambda _: proof)
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["diagnostic_fields_redacted"] is True
+    assert private_marker not in repr(receipt)
+    assert sensitive_key not in repr(receipt.runtime_evidence)
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["failed", "accepted", "acknowledged", "dispatched", "pending", "queued", "running", "in progress"],
+)
+def test_non_complete_handler_status_cannot_be_overridden_by_completion_flags(status):
+    plan = DirectiveCompiler.parse("relay task to peer node")
+    orchestrator = DirectiveOrchestrator()
+    orchestrator.register_handler(
+        DirectiveType.RELAY,
+        lambda _: {
+            "status": status,
+            "completed": True,
+            "verification_passed": True,
+            "verification_method": "read-after-write",
+            "evidence_refs": ["relay:leg:42"],
+        },
+    )
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["completion_state"] == "unverified"
