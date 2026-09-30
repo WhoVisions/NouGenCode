@@ -107,7 +107,7 @@ def test_handler_with_explicit_verification_evidence_can_complete():
 
     assert receipt.success
     assert receipt.runtime_evidence["completion_state"] == "verified"
-    assert receipt.runtime_evidence["evidence_refs"] == ["shard:db1:42"]
+    assert receipt.runtime_evidence["evidence_refs"] == ("shard:db1:42",)
 
 
 def test_receipt_hash_is_stable_across_nested_evidence_mapping_order():
@@ -156,6 +156,30 @@ def test_receipt_hash_is_bound_to_its_directive_plan():
     assert first.success and second.success
     assert first.plan_hash != second.plan_hash
     assert first.output_hash != second.output_hash
+
+
+def test_receipt_evidence_is_deeply_immutable_after_hashing():
+    metadata = {"nested": {"ids": ["result-1"]}}
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": metadata,
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+    metadata["nested"]["ids"].append("tampered")
+
+    assert receipt.success
+    assert receipt.runtime_evidence["metadata"]["nested"]["ids"] == ("result-1",)
+    with pytest.raises(TypeError):
+        receipt.runtime_evidence["metadata"]["nested"]["id"] = "tampered"
 
 
 def test_non_json_handler_evidence_fails_closed_without_serialization_details():

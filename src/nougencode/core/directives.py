@@ -27,18 +27,35 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from hashlib import sha256
+from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 def _canonical_json(value: Any) -> str:
     """Serialize JSON-compatible values with recursive stable key ordering."""
     return json.dumps(
-        value,
+        _json_compatible(value),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
         allow_nan=False,
     )
+
+
+def _json_compatible(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _json_compatible(nested) for key, nested in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_compatible(nested) for nested in value]
+    return value
+
+
+def _freeze_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _freeze_json(nested) for key, nested in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json(nested) for nested in value)
+    return value
 
 
 class DirectiveType(str, Enum):
@@ -95,6 +112,9 @@ class DirectiveReceipt:
     runtime_evidence: Mapping[str, Any]
     output_hash: str
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "runtime_evidence", _freeze_json(self.runtime_evidence))
 
 
 class DirectiveCompiler:
