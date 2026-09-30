@@ -209,6 +209,10 @@ def test_receipt_json_export_is_detached_and_serializable():
     assert not DirectiveReceipt.verify_exported_json(
         serialized.replace('"success": true,', '"success": true, "success": false,', 1)
     )
+    timestamp_pair = f'"timestamp": "{exported["timestamp"]}"'
+    assert not DirectiveReceipt.verify_exported_json(
+        serialized.replace(timestamp_pair, f'{timestamp_pair}, {timestamp_pair}', 1)
+    )
     exported["unhashed_annotation"] = "cannot be smuggled into a verified receipt"
     assert not DirectiveReceipt.verify_exported_dict(exported)
     del exported["unhashed_annotation"]
