@@ -181,6 +181,8 @@ the receipt. These checks validate the shape of proof, not its authenticity:
 adapters must provide evidence from a genuine verification step. The receipt
 hash binds the plan hash to canonical JSON evidence, so nested map ordering or
 plan substitution cannot silently reuse a receipt.
+Receipt evidence is deeply immutable in memory; call `DirectiveReceipt.to_dict()`
+to obtain a detached JSON-compatible copy for storage or transport.
 
 ## Dynamic context paths
 
