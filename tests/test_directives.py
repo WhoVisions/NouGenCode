@@ -206,6 +206,19 @@ def test_receipt_json_export_is_detached_and_serializable():
     assert receipt.runtime_evidence["metadata"]["ids"] == ("result-1",)
 
 
+def test_receipt_json_export_rejects_non_json_numbers():
+    receipt = DirectiveReceipt(
+        plan_hash="plan",
+        directive_type=DirectiveType.SHARD,
+        success=False,
+        runtime_evidence={"value": float("nan")},
+        output_hash="output",
+    )
+
+    with pytest.raises(ValueError):
+        receipt.to_dict()
+
+
 def test_non_json_handler_evidence_fails_closed_without_serialization_details():
     plan = DirectiveCompiler.parse("shard memory 42")
     orchestrator = DirectiveOrchestrator(

@@ -122,7 +122,9 @@ class DirectiveReceipt:
             "plan_hash": self.plan_hash,
             "directive_type": self.directive_type.value,
             "success": self.success,
-            "runtime_evidence": _json_compatible(self.runtime_evidence),
+            # Round-trip through the strict canonical serializer so even a
+            # manually constructed receipt cannot export NaN or opaque values.
+            "runtime_evidence": json.loads(_canonical_json(self.runtime_evidence)),
             "output_hash": self.output_hash,
             "timestamp": self.timestamp,
         }
