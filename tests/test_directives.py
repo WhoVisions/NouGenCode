@@ -281,6 +281,27 @@ def test_non_json_handler_evidence_fails_closed_without_serialization_details():
     assert "not JSON serializable" not in repr(receipt)
 
 
+def test_colliding_json_object_keys_fail_closed_in_handler_evidence():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {1: "integer key", "1": "string key"},
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["error_type"] == "ValueError"
+    assert receipt.has_valid_output_hash()
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

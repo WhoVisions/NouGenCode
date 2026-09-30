@@ -43,9 +43,23 @@ def _canonical_json(value: Any) -> str:
     )
 
 
+def _string_keyed_mapping(value: Mapping[Any, Any]) -> Dict[str, Any]:
+    """Normalize object keys without silently collapsing distinct source keys."""
+    result: Dict[str, Any] = {}
+    for key, nested in value.items():
+        normalized_key = str(key)
+        if normalized_key in result:
+            raise ValueError("duplicate object keys after JSON key normalization")
+        result[normalized_key] = nested
+    return result
+
+
 def _json_compatible(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(key): _json_compatible(nested) for key, nested in value.items()}
+        return {
+            key: _json_compatible(nested)
+            for key, nested in _string_keyed_mapping(value).items()
+        }
     if isinstance(value, (list, tuple)):
         return [_json_compatible(nested) for nested in value]
     return value
@@ -53,7 +67,10 @@ def _json_compatible(value: Any) -> Any:
 
 def _freeze_json(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return MappingProxyType({str(key): _freeze_json(nested) for key, nested in value.items()})
+        return MappingProxyType({
+            key: _freeze_json(nested)
+            for key, nested in _string_keyed_mapping(value).items()
+        })
     if isinstance(value, (list, tuple)):
         return tuple(_freeze_json(nested) for nested in value)
     return value
@@ -436,7 +453,10 @@ class DirectiveOrchestrator:
                     ):
                         redacted = True
                         continue
-                    result[str(key)] = clean(nested)
+                    output_key = str(key)
+                    if output_key in result:
+                        raise ValueError("duplicate object keys after JSON key normalization")
+                    result[output_key] = clean(nested)
                 return result
             if isinstance(item, list):
                 return [clean(nested) for nested in item]
