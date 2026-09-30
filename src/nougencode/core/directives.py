@@ -30,6 +30,17 @@ from hashlib import sha256
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
+def _canonical_json(value: Any) -> str:
+    """Serialize JSON-compatible values with recursive stable key ordering."""
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
 class DirectiveType(str, Enum):
     SHARD = "shard"
     RELAY = "relay"
@@ -67,7 +78,7 @@ class DirectivePlan:
             self.directive_type.value,
             self.canonical_intent,
             self.target_subsystem,
-            tuple(sorted((str(k), str(v)) for k, v in self.parameters.items())),
+            tuple(sorted((str(k), _canonical_json(v)) for k, v in self.parameters.items())),
             tuple(c.name for c in self.constraints),
             self.idempotency_key,
         )
@@ -344,14 +355,7 @@ class DirectiveOrchestrator:
     @staticmethod
     def _evidence_hash(evidence: Mapping[str, Any]) -> str:
         """Hash JSON-compatible evidence with recursive, stable key ordering."""
-        canonical = json.dumps(
-            evidence,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        )
-        return sha256(canonical.encode("utf-8")).hexdigest()
+        return sha256(_canonical_json(evidence).encode("utf-8")).hexdigest()
 
     @classmethod
     def _sanitize_evidence(cls, value: Any) -> Tuple[Dict[str, Any], bool]:

@@ -1,5 +1,7 @@
 """Unit tests for NouGen Directives OS Kernel."""
 
+from dataclasses import replace
+
 import pytest
 from nougencode.core.directives import (
     DirectiveCompiler,
@@ -44,6 +46,14 @@ def test_plan_hash_is_invariant_and_deterministic():
 
     assert plan1.compute_plan_hash() == plan2.compute_plan_hash()
     assert plan1.idempotency_key == plan2.idempotency_key
+
+
+def test_plan_hash_is_stable_across_nested_parameter_mapping_order():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    first = replace(plan, parameters={**plan.parameters, "metadata": {"db": 1, "shard": 42}})
+    second = replace(plan, parameters={**plan.parameters, "metadata": {"shard": 42, "db": 1}})
+
+    assert first.compute_plan_hash() == second.compute_plan_hash()
 
 
 def test_unconfigured_orchestrator_does_not_claim_dispatch_or_completion():
