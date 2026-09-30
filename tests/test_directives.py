@@ -235,6 +235,11 @@ def test_receipt_json_export_rejects_non_json_numbers():
     assert not receipt.has_valid_output_hash()
 
 
+@pytest.mark.parametrize("payload", [None, b"{}", "{", "null", "[]", '"text"'])
+def test_exported_json_verifier_fails_closed_on_malformed_roots(payload):
+    assert not DirectiveReceipt.verify_exported_json(payload)
+
+
 def test_receipt_output_hash_can_be_checked_after_creation():
     plan = DirectiveCompiler.parse("shard memory 42")
     receipt = DirectiveOrchestrator(
