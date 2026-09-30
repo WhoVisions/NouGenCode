@@ -129,6 +129,12 @@ class DirectiveReceipt:
             "timestamp": self.timestamp,
         }
 
+    def has_valid_output_hash(self) -> bool:
+        """Check that the immutable evidence still matches its receipt hash."""
+        payload = {"plan_hash": self.plan_hash, "runtime_evidence": self.runtime_evidence}
+        expected = sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+        return expected == self.output_hash
+
 
 class DirectiveCompiler:
     """Deterministic parser and compiler for NouGen conversational directives."""

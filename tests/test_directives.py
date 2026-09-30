@@ -219,6 +219,30 @@ def test_receipt_json_export_rejects_non_json_numbers():
         receipt.to_dict()
 
 
+def test_receipt_output_hash_can_be_checked_after_creation():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    receipt = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+            }
+        }
+    ).execute(plan)
+
+    assert receipt.has_valid_output_hash()
+    inconsistent = DirectiveReceipt(
+        plan_hash=receipt.plan_hash,
+        directive_type=receipt.directive_type,
+        success=receipt.success,
+        runtime_evidence=receipt.runtime_evidence,
+        output_hash="0" * 64,
+    )
+    assert not inconsistent.has_valid_output_hash()
+
+
 def test_non_json_handler_evidence_fails_closed_without_serialization_details():
     plan = DirectiveCompiler.parse("shard memory 42")
     orchestrator = DirectiveOrchestrator(
