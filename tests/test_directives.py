@@ -203,6 +203,7 @@ def test_receipt_json_export_is_detached_and_serializable():
 
     assert json.dumps(exported, sort_keys=True)
     assert DirectiveReceipt.verify_exported_dict(exported)
+    assert DirectiveReceipt.verify_exported_dict(json.loads(json.dumps(exported)))
     exported["unhashed_annotation"] = "cannot be smuggled into a verified receipt"
     assert not DirectiveReceipt.verify_exported_dict(exported)
     del exported["unhashed_annotation"]
