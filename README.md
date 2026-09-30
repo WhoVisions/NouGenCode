@@ -167,6 +167,19 @@ references contain no machine or tenant paths. A missing Shards package, Relay
 directory, or active leg is reported in the proof rather than presented as a
 successful capture.
 
+## Directive dispatch receipts
+
+`DirectiveOrchestrator` keeps routing separate from completion. With no
+registered handler it records that no execution was attempted. Once a handler
+runs, the receipt records the attempt but remains provisional unless the
+handler supplies `completed=True`, `verification_passed=True`, a non-empty
+`verification_method`, and non-empty `evidence_refs`. Accepted, queued,
+dispatched, running, pending, failed, or unknown statuses cannot close the
+directive. If common diagnostic or credential fields are removed from handler
+evidence, the receipt stays provisional; exception text is never copied into
+the receipt. These checks validate the shape of proof, not its authenticity:
+adapters must provide evidence from a genuine verification step.
+
 ## Dynamic context paths
 
 The NOUGEN_CONTEXT_DIR environment variable can select a context store. Otherwise
