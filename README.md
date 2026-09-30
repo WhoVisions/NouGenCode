@@ -183,7 +183,8 @@ hash binds the plan hash, directive type, success verdict, and canonical JSON
 evidence, so nested map ordering, verdict edits, or plan substitution cannot
 silently reuse a receipt.
 Receipt evidence is deeply immutable in memory; call `DirectiveReceipt.to_dict()`
-to obtain a detached JSON-compatible copy for storage or transport.
+to obtain a detached JSON-compatible copy for storage or transport, then use
+`DirectiveReceipt.verify_exported_dict()` to check it after transport.
 
 ## Dynamic context paths
 

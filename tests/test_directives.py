@@ -202,8 +202,10 @@ def test_receipt_json_export_is_detached_and_serializable():
     exported = receipt.to_dict()
 
     assert json.dumps(exported, sort_keys=True)
+    assert DirectiveReceipt.verify_exported_dict(exported)
     exported["runtime_evidence"]["metadata"]["ids"].append("changed")
     assert receipt.runtime_evidence["metadata"]["ids"] == ("result-1",)
+    assert not DirectiveReceipt.verify_exported_dict(exported)
 
 
 def test_receipt_json_export_rejects_non_json_numbers():

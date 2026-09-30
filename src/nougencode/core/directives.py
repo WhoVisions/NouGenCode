@@ -167,6 +167,28 @@ class DirectiveReceipt:
             return False
         return hmac.compare_digest(expected, self.output_hash)
 
+    @classmethod
+    def verify_exported_dict(cls, value: Any) -> bool:
+        """Verify an exported receipt after it crosses a JSON boundary."""
+        if not isinstance(value, Mapping):
+            return False
+        try:
+            if not isinstance(value["runtime_evidence"], Mapping):
+                return False
+            if type(value["success"]) is not bool or not isinstance(value["timestamp"], str):
+                return False
+            receipt = cls(
+                plan_hash=value["plan_hash"],
+                directive_type=DirectiveType(value["directive_type"]),
+                success=value["success"],
+                runtime_evidence=value["runtime_evidence"],
+                output_hash=value["output_hash"],
+                timestamp=value["timestamp"],
+            )
+            return receipt.has_valid_output_hash()
+        except (KeyError, TypeError, ValueError):
+            return False
+
 
 class DirectiveCompiler:
     """Deterministic parser and compiler for NouGen conversational directives."""
