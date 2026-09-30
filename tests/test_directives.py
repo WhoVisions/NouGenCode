@@ -139,6 +139,25 @@ def test_receipt_hash_is_stable_across_nested_evidence_mapping_order():
     assert first.output_hash == second.output_hash
 
 
+def test_receipt_hash_is_bound_to_its_directive_plan():
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+            }
+        }
+    )
+    first = orchestrator.execute(DirectiveCompiler.parse("shard memory 42"))
+    second = orchestrator.execute(DirectiveCompiler.parse("shard memory 43"))
+
+    assert first.success and second.success
+    assert first.plan_hash != second.plan_hash
+    assert first.output_hash != second.output_hash
+
+
 def test_non_json_handler_evidence_fails_closed_without_serialization_details():
     plan = DirectiveCompiler.parse("shard memory 42")
     orchestrator = DirectiveOrchestrator(
