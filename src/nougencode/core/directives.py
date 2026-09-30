@@ -116,6 +116,17 @@ class DirectiveReceipt:
     def __post_init__(self) -> None:
         object.__setattr__(self, "runtime_evidence", _freeze_json(self.runtime_evidence))
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a detached JSON-compatible receipt for storage or transport."""
+        return {
+            "plan_hash": self.plan_hash,
+            "directive_type": self.directive_type.value,
+            "success": self.success,
+            "runtime_evidence": _json_compatible(self.runtime_evidence),
+            "output_hash": self.output_hash,
+            "timestamp": self.timestamp,
+        }
+
 
 class DirectiveCompiler:
     """Deterministic parser and compiler for NouGen conversational directives."""

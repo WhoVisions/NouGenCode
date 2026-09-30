@@ -2,6 +2,8 @@
 
 from dataclasses import replace
 
+import json
+
 import pytest
 from nougencode.core.directives import (
     DirectiveCompiler,
@@ -180,6 +182,28 @@ def test_receipt_evidence_is_deeply_immutable_after_hashing():
     assert receipt.runtime_evidence["metadata"]["nested"]["ids"] == ("result-1",)
     with pytest.raises(TypeError):
         receipt.runtime_evidence["metadata"]["nested"]["id"] = "tampered"
+
+
+def test_receipt_json_export_is_detached_and_serializable():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {"ids": ["result-1"]},
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+    exported = receipt.to_dict()
+
+    assert json.dumps(exported, sort_keys=True)
+    exported["runtime_evidence"]["metadata"]["ids"].append("changed")
+    assert receipt.runtime_evidence["metadata"]["ids"] == ("result-1",)
 
 
 def test_non_json_handler_evidence_fails_closed_without_serialization_details():
