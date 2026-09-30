@@ -379,6 +379,7 @@ def test_handler_exception_does_not_copy_raw_diagnostic_into_receipt():
     assert receipt.runtime_evidence["error_type"] == "RuntimeError"
     assert "protected diagnostics" in receipt.runtime_evidence["remaining_work"]
     assert private_marker not in repr(receipt)
+    assert private_marker not in json.dumps(receipt.to_dict())
 
 
 @pytest.mark.parametrize(
@@ -404,6 +405,8 @@ def test_handler_receipt_redacts_nested_diagnostic_and_credential_fields(sensiti
     assert receipt.runtime_evidence["diagnostic_fields_redacted"] is True
     assert private_marker not in repr(receipt)
     assert sensitive_key not in repr(receipt.runtime_evidence)
+    assert private_marker not in json.dumps(receipt.to_dict())
+    assert sensitive_key not in json.dumps(receipt.to_dict())
 
 
 @pytest.mark.parametrize(
