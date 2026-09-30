@@ -217,6 +217,7 @@ def test_receipt_json_export_rejects_non_json_numbers():
 
     with pytest.raises(ValueError):
         receipt.to_dict()
+    assert not receipt.has_valid_output_hash()
 
 
 def test_receipt_output_hash_can_be_checked_after_creation():

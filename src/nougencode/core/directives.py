@@ -149,13 +149,16 @@ class DirectiveReceipt:
 
     def has_valid_output_hash(self) -> bool:
         """Check that the receipt verdict and evidence match its output hash."""
-        payload = {
-            "plan_hash": self.plan_hash,
-            "directive_type": self.directive_type.value,
-            "success": self.success,
-            "runtime_evidence": self.runtime_evidence,
-        }
-        expected = sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+        try:
+            payload = {
+                "plan_hash": self.plan_hash,
+                "directive_type": self.directive_type.value,
+                "success": self.success,
+                "runtime_evidence": self.runtime_evidence,
+            }
+            expected = sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+        except (TypeError, ValueError):
+            return False
         return isinstance(self.output_hash, str) and hmac.compare_digest(expected, self.output_hash)
 
 
