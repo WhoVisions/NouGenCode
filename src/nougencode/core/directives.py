@@ -203,6 +203,26 @@ class DirectiveReceipt:
         except (KeyError, TypeError, ValueError):
             return False
 
+    @classmethod
+    def verify_exported_json(cls, value: Any) -> bool:
+        """Verify receipt JSON while rejecting duplicate keys at every depth."""
+        if not isinstance(value, str):
+            return False
+
+        def unique_object(pairs: List[Tuple[str, Any]]) -> Dict[str, Any]:
+            result: Dict[str, Any] = {}
+            for key, nested in pairs:
+                if key in result:
+                    raise ValueError("duplicate JSON object key")
+                result[key] = nested
+            return result
+
+        try:
+            decoded = json.loads(value, object_pairs_hook=unique_object)
+        except (TypeError, ValueError):
+            return False
+        return cls.verify_exported_dict(decoded)
+
 
 class DirectiveCompiler:
     """Deterministic parser and compiler for NouGen conversational directives."""

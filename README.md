@@ -184,7 +184,8 @@ evidence, so nested map ordering, verdict edits, or plan substitution cannot
 silently reuse a receipt.
 Receipt evidence is deeply immutable in memory; call `DirectiveReceipt.to_dict()`
 to obtain a detached JSON-compatible copy for storage or transport, then use
-`DirectiveReceipt.verify_exported_dict()` to check it after transport.
+`DirectiveReceipt.verify_exported_dict()` to check it after transport, or
+`DirectiveReceipt.verify_exported_json()` to reject duplicate JSON keys while decoding.
 
 ## Dynamic context paths
 
