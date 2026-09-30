@@ -100,6 +100,35 @@ def test_handler_with_explicit_verification_evidence_can_complete():
     assert receipt.runtime_evidence["evidence_refs"] == ["shard:db1:42"]
 
 
+def test_receipt_hash_is_stable_across_nested_evidence_mapping_order():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    first = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {"db": 1, "shard": 42},
+            }
+        }
+    ).execute(plan)
+    second = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {"shard": 42, "db": 1},
+            }
+        }
+    ).execute(plan)
+
+    assert first.success and second.success
+    assert first.output_hash == second.output_hash
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

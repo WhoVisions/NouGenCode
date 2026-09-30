@@ -21,6 +21,7 @@ Zero hardcoding: all paths, keys, and endpoints are dynamically resolved via reg
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -268,7 +269,7 @@ class DirectiveOrchestrator:
                 "completion_state": "unconfigured",
                 "remaining_work": "Register an executor; no work was performed.",
             }
-            out_hash = sha256(repr(evidence).encode("utf-8")).hexdigest()
+            out_hash = self._evidence_hash(evidence)
             return DirectiveReceipt(
                 plan_hash=plan_hash,
                 directive_type=plan.directive_type,
@@ -291,7 +292,7 @@ class DirectiveOrchestrator:
                     "remaining_work",
                     "Verify the result and provide verification_method, verification_passed, and evidence_refs.",
                 )
-            out_hash = sha256(repr(sorted(evidence.items())).encode("utf-8")).hexdigest()
+            out_hash = self._evidence_hash(evidence)
             return DirectiveReceipt(
                 plan_hash=plan_hash,
                 directive_type=plan.directive_type,
@@ -310,7 +311,7 @@ class DirectiveOrchestrator:
                 "completion_state": "failed",
                 "remaining_work": "Inspect protected diagnostics and retry only after the cause is understood.",
             }
-            out_hash = sha256(repr(err_evidence).encode("utf-8")).hexdigest()
+            out_hash = self._evidence_hash(err_evidence)
             return DirectiveReceipt(
                 plan_hash=plan_hash,
                 directive_type=plan.directive_type,
@@ -339,6 +340,18 @@ class DirectiveOrchestrator:
             and bool(refs)
             and all(isinstance(ref, str) and bool(ref.strip()) for ref in refs)
         )
+
+    @staticmethod
+    def _evidence_hash(evidence: Mapping[str, Any]) -> str:
+        """Hash JSON-compatible evidence with recursive, stable key ordering."""
+        canonical = json.dumps(
+            evidence,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        return sha256(canonical.encode("utf-8")).hexdigest()
 
     @classmethod
     def _sanitize_evidence(cls, value: Any) -> Tuple[Dict[str, Any], bool]:
