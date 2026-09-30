@@ -167,7 +167,7 @@ class DirectiveReceipt:
                 "runtime_evidence": self.runtime_evidence,
             }
             expected = sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
-        except (TypeError, ValueError):
+        except (RecursionError, TypeError, ValueError):
             return False
         return hmac.compare_digest(expected, self.output_hash)
 
@@ -200,7 +200,7 @@ class DirectiveReceipt:
                 timestamp=value["timestamp"],
             )
             return receipt.has_valid_output_hash()
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, RecursionError, TypeError, ValueError):
             return False
 
     @classmethod
@@ -219,7 +219,7 @@ class DirectiveReceipt:
 
         try:
             decoded = json.loads(value, object_pairs_hook=unique_object)
-        except (TypeError, ValueError):
+        except (RecursionError, TypeError, ValueError):
             return False
         return cls.verify_exported_dict(decoded)
 

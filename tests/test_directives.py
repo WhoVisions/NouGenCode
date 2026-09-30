@@ -240,6 +240,12 @@ def test_exported_json_verifier_fails_closed_on_malformed_roots(payload):
     assert not DirectiveReceipt.verify_exported_json(payload)
 
 
+def test_exported_json_verifier_fails_closed_on_excessive_nesting():
+    payload = "[" * 1200 + "0" + "]" * 1200
+
+    assert not DirectiveReceipt.verify_exported_json(payload)
+
+
 def test_receipt_output_hash_can_be_checked_after_creation():
     plan = DirectiveCompiler.parse("shard memory 42")
     receipt = DirectiveOrchestrator(
