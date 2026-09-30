@@ -242,6 +242,8 @@ def test_receipt_output_hash_can_be_checked_after_creation():
         output_hash="0" * 64,
     )
     assert not inconsistent.has_valid_output_hash()
+    with pytest.raises(ValueError, match="output hash is invalid"):
+        inconsistent.to_dict()
     changed_verdict = DirectiveReceipt(
         plan_hash=receipt.plan_hash,
         directive_type=receipt.directive_type,

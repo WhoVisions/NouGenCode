@@ -136,6 +136,8 @@ class DirectiveReceipt:
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a detached JSON-compatible receipt for storage or transport."""
+        if not self.has_valid_output_hash():
+            raise ValueError("directive receipt output hash is invalid")
         return {
             "plan_hash": self.plan_hash,
             "directive_type": self.directive_type.value,
