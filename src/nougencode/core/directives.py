@@ -176,6 +176,16 @@ class DirectiveReceipt:
         """Verify an exported receipt after it crosses a JSON boundary."""
         if not isinstance(value, Mapping):
             return False
+        expected_keys = {
+            "plan_hash",
+            "directive_type",
+            "success",
+            "runtime_evidence",
+            "output_hash",
+            "timestamp",
+        }
+        if set(value) != expected_keys:
+            return False
         try:
             if not isinstance(value["runtime_evidence"], Mapping):
                 return False
