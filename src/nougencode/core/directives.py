@@ -21,6 +21,7 @@ Zero hardcoding: all paths, keys, and endpoints are dynamically resolved via reg
 
 from __future__ import annotations
 
+import hmac
 import json
 import re
 from dataclasses import dataclass, field
@@ -133,7 +134,7 @@ class DirectiveReceipt:
         """Check that the immutable evidence still matches its receipt hash."""
         payload = {"plan_hash": self.plan_hash, "runtime_evidence": self.runtime_evidence}
         expected = sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
-        return expected == self.output_hash
+        return isinstance(self.output_hash, str) and hmac.compare_digest(expected, self.output_hash)
 
 
 class DirectiveCompiler:
