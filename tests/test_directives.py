@@ -276,6 +276,18 @@ def test_receipt_integrity_check_rejects_malformed_digest_fields():
     assert not receipt.has_valid_output_hash()
 
 
+def test_receipt_integrity_check_rejects_non_boolean_verdict():
+    receipt = DirectiveReceipt(
+        plan_hash="a" * 64,
+        directive_type=DirectiveType.SHARD,
+        success=1,
+        runtime_evidence={},
+        output_hash="0" * 64,
+    )
+
+    assert not receipt.has_valid_output_hash()
+
+
 def test_non_json_handler_evidence_fails_closed_without_serialization_details():
     plan = DirectiveCompiler.parse("shard memory 42")
     orchestrator = DirectiveOrchestrator(
