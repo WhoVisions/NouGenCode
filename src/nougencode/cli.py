@@ -32,6 +32,11 @@ def main() -> int:
     p_route = subparsers.add_parser("route", help="Empirically preview optimal provider resolution for a role")
     p_route.add_argument("--role", default="builder", help="Role to evaluate (architect, builder, critic, tester, security)")
 
+    # git-state subcommand (tri-state working-tree check)
+    p_gitstate = subparsers.add_parser("git-state", help="Tri-state working-tree check (clean/dirty/unknown) with staged/unstaged/untracked split")
+    p_gitstate.add_argument("repo_path", nargs="?", default=".", help="Repository path (default: current directory)")
+    p_gitstate.add_argument("--json", dest="git_json", action="store_true", help="Output as JSON")
+
     p_profile = subparsers.add_parser("capability-profile", help="Validate and resolve a scheduler capability profile")
     profile_subparsers = p_profile.add_subparsers(dest="profile_command", required=True)
     p_profile_validate = profile_subparsers.add_parser("validate", help="Validate profile evidence and print its current scheduler view")
@@ -77,6 +82,13 @@ def main() -> int:
                 avail = "ONLINE" if cap.is_available else "OFFLINE"
                 print(f"  * {cap.name} [{avail}] — Roles: {', '.join(cap.supported_roles)} ({cap.cost_tier})")
         return 0
+
+    if args.subcommand == "git-state":
+        import json
+        from .repo.git_state import EXIT_CODES, inspect, render
+        gs = inspect(args.repo_path)
+        print(json.dumps(gs.to_dict(), indent=2) if (args.git_json or args.json) else render(gs))
+        return EXIT_CODES[gs.state]
 
     if args.subcommand == "audit":
         from .security.invariants import ConcentricSecurityGate
