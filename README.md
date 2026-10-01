@@ -187,6 +187,24 @@ The existing scanner CLI remains available:
     nougencode --no-orphans
     nougencode --no-ast
 
+## Git working-tree state
+
+    nougencode git-state ./path/to/repo
+    nougencode --json git-state ./path/to/repo
+
+The check is tri-state: `clean` (exit 0), `dirty` (exit 1) or `unknown` (exit 3).
+`unknown` means git could not answer (not a repository, `index.lock` contention, I/O
+error, timeout) and blocks ship/merge exactly like `dirty`. The common shell check
+`[ -n "$(git status --porcelain)" ]` is fail-open: a failing `git status` prints nothing,
+which is also what a clean tree prints, so it answers "clean" when it cannot answer at all.
+Here the exit status is read before any output.
+
+Staged (HEAD vs index), unstaged (index vs working tree), untracked and unmerged paths
+are reported separately from `git status --porcelain=v2 -z`, so paths with spaces parse
+exactly. `tracked_dirty` is the Nix definition (untracked files ignored). The report also
+flags shared-checkout hazards: stash entries, a detached HEAD, unpushed commits or a
+branch with no upstream, and unmerged paths. The command never mutates the repository.
+
 ## Scheduler capability profiles
 
 The versioned JSON Schema at `src/nougencode/schemas/scheduler-capability-profile.schema.json`
