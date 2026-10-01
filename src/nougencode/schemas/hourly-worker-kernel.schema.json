@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nougencode:hourly-worker-kernel:1",
+  "title": "NouGenCode elevated hourly worker kernel cycle schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "cycle_id",
+    "tenant_id",
+    "fence_token",
+    "tick",
+    "truth",
+    "decision_action",
+    "delta",
+    "verification_receipt",
+    "emitted_events",
+    "quarantined_count"
+  ],
+  "properties": {
+    "cycle_id": {"type": "string", "minLength": 1},
+    "tenant_id": {"type": "string", "minLength": 1},
+    "fence_token": {"type": "integer", "minimum": 1},
+    "tick": {
+      "type": "object",
+      "required": ["tick_id", "cycle_number", "scheduled_at", "triggered_at"],
+      "properties": {
+        "tick_id": {"type": "string"},
+        "cycle_number": {"type": "integer", "minimum": 0},
+        "scheduled_at": {"type": "string", "format": "date-time"},
+        "triggered_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "truth": {
+      "type": "object",
+      "required": ["status", "reason", "evidence_ids"],
+      "properties": {
+        "status": {"enum": ["PASS", "FAIL", "UNKNOWN", "UNKNOWN_WITHIN_BUDGET"]},
+        "reason": {"type": "string"},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "decision_action": {"enum": ["ROUTE", "AVOID", "UNKNOWN"]},
+    "delta": {
+      "type": "object",
+      "required": ["delta_id", "is_material", "delta_hash"],
+      "properties": {
+        "delta_id": {"type": "string"},
+        "is_material": {"type": "boolean"},
+        "added_keys": {"type": "array", "items": {"type": "string"}},
+        "removed_keys": {"type": "array", "items": {"type": "string"}},
+        "modified_keys": {"type": "array", "items": {"type": "string"}},
+        "truth_transition": {"type": ["array", "null"]},
+        "delta_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "verification_receipt": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "receipt_id",
+        "stage",
+        "source_id",
+        "tenant_id",
+        "mission_id",
+        "observed_at",
+        "truth_status",
+        "decision_action",
+        "decision_hash",
+        "fence_token",
+        "payload_sha256",
+        "is_verified"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "receipt_id": {"type": "string"},
+        "stage": {"type": "string"},
+        "source_id": {"type": "string"},
+        "tenant_id": {"type": "string"},
+        "mission_id": {"type": "string"},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "truth_status": {"type": "string"},
+        "decision_action": {"type": "string"},
+        "decision_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "fence_token": {"type": "integer", "minimum": 1},
+        "payload_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "is_verified": {"type": "boolean"}
+      }
+    },
+    "emitted_events": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "quarantined_count": {"type": "integer", "minimum": 0}
+  }
+}

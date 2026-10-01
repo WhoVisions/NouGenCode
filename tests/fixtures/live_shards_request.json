@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0.0",
+  "as_of": "2026-09-29T17:51:11.855Z",
+  "task": {
+    "task_id": "task-live-federation-routing",
+    "objective": "Verify live Shards federation route and arbitrate WhoArt health vs MCP status",
+    "capability": "arbiter",
+    "files_expected": [
+      "src/nougencode/core/golden_slice.py"
+    ],
+    "mutation_budget": {
+      "max_files": 2,
+      "max_added_lines": 50,
+      "max_deleted_lines": 0,
+      "allowed_roots": [
+        "src/nougencode"
+      ],
+      "forbidden_roots": [
+        "secrets"
+      ]
+    }
+  },
+  "coverage": {
+    "expected_source_ids": [
+      "whoart-health",
+      "whoart-mcp"
+    ],
+    "observations": [
+      {
+        "observation_id": "obs-whoart-health-01",
+        "source_id": "whoart-health",
+        "provenance": "https://whoart-vault.nougenai.com/health",
+        "value": null,
+        "status": "TIMED_OUT",
+        "observed_at": "2026-09-29T17:51:11.855Z",
+        "freshness_ttl_seconds": 60,
+        "elapsed_seconds": 4.8,
+        "budget_seconds": 5
+      },
+      {
+        "observation_id": "obs-whoart-mcp-01",
+        "source_id": "whoart-mcp",
+        "provenance": "https://whoart-vault.nougenai.com/mcp",
+        "value": true,
+        "status": "OBSERVED",
+        "observed_at": "2026-09-29T17:51:11.855Z",
+        "freshness_ttl_seconds": 300
+      }
+    ]
+  }
+}
