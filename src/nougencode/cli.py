@@ -119,7 +119,6 @@ def main() -> int:
 
     if args.subcommand == "capability-profile":
         import json
-        from datetime import datetime
 
         from .capability_profile import CapabilityProfileError, capability_summary, load_profile
 
