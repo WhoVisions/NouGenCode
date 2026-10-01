@@ -1,5 +1,9 @@
 """Unit tests for NouGen Directives OS Kernel."""
 
+from dataclasses import replace
+
+import json
+
 import pytest
 from nougencode.core.directives import (
     DirectiveCompiler,
@@ -30,7 +34,10 @@ def test_compiler_recognizes_core_vocabulary():
         assert plan.directive_type == expected_type, f"Failed on '{text}'"
         assert plan.target_subsystem == expected_subsystem
         assert plan.idempotency_key is not None
-        assert len(plan.constraints) == 3
+        assert {item.name for item in plan.constraints} >= {
+            "dispatch_is_not_completion",
+            "completion_requires_verification",
+        }
 
 
 def test_plan_hash_is_invariant_and_deterministic():
@@ -43,18 +50,30 @@ def test_plan_hash_is_invariant_and_deterministic():
     assert plan1.idempotency_key == plan2.idempotency_key
 
 
-def test_orchestrator_execution_and_receipt():
+def test_plan_hash_is_stable_across_nested_parameter_mapping_order():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    first = replace(plan, parameters={**plan.parameters, "metadata": {"db": 1, "shard": 42}})
+    second = replace(plan, parameters={**plan.parameters, "metadata": {"shard": 42, "db": 1}})
+
+    assert first.compute_plan_hash() == second.compute_plan_hash()
+
+
+def test_unconfigured_orchestrator_does_not_claim_dispatch_or_completion():
     plan = DirectiveCompiler.parse("relay task to peer node")
     orchestrator = DirectiveOrchestrator()
 
     receipt = orchestrator.execute(plan)
-    assert receipt.success
+    assert not receipt.success
     assert receipt.directive_type == DirectiveType.RELAY
-    assert receipt.runtime_evidence["dispatched"] is True
+    assert receipt.runtime_evidence["dispatched"] is False
+    assert receipt.runtime_evidence["execution_attempted"] is False
+    assert receipt.runtime_evidence["status"] == "not_configured"
+    assert receipt.runtime_evidence["completion_state"] == "unconfigured"
+    assert "no work was performed" in receipt.runtime_evidence["remaining_work"]
     assert len(receipt.output_hash) == 64
 
 
-def test_orchestrator_custom_handler():
+def test_handler_return_without_verification_remains_provisional():
     plan = DirectiveCompiler.parse("shard memory 42")
     orchestrator = DirectiveOrchestrator()
 
@@ -64,6 +83,398 @@ def test_orchestrator_custom_handler():
     orchestrator.register_handler(DirectiveType.SHARD, mock_shard_handler)
     receipt = orchestrator.execute(plan)
 
-    assert receipt.success
+    assert not receipt.success
     assert receipt.runtime_evidence["sharded_id"] == 42
     assert receipt.runtime_evidence["status"] == "persisted"
+    assert receipt.runtime_evidence["completion_state"] == "unverified"
+    assert "verification_method" in receipt.runtime_evidence["remaining_work"]
+
+
+def test_handler_with_explicit_verification_evidence_can_complete():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator()
+
+    def verified_handler(p: DirectivePlan):
+        return {
+            "sharded_id": 42,
+            "status": "persisted",
+            "completed": True,
+            "verification_passed": True,
+            "verification_method": "read-after-write",
+            "evidence_refs": ["shard:db1:42"],
+        }
+
+    orchestrator.register_handler(DirectiveType.SHARD, verified_handler)
+    receipt = orchestrator.execute(plan)
+
+    assert receipt.success
+    assert receipt.runtime_evidence["completion_state"] == "verified"
+    assert receipt.runtime_evidence["evidence_refs"] == ("shard:db1:42",)
+
+
+def test_receipt_hash_is_stable_across_nested_evidence_mapping_order():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    first = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {"db": 1, "shard": 42},
+            }
+        }
+    ).execute(plan)
+    second = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {"shard": 42, "db": 1},
+            }
+        }
+    ).execute(plan)
+
+    assert first.success and second.success
+    assert first.output_hash == second.output_hash
+
+
+def test_receipt_hash_is_bound_to_its_directive_plan():
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+            }
+        }
+    )
+    first = orchestrator.execute(DirectiveCompiler.parse("shard memory 42"))
+    second = orchestrator.execute(DirectiveCompiler.parse("shard memory 43"))
+
+    assert first.success and second.success
+    assert first.plan_hash != second.plan_hash
+    assert first.output_hash != second.output_hash
+
+
+def test_receipt_evidence_is_deeply_immutable_after_hashing():
+    metadata = {"nested": {"ids": ["result-1"]}}
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": metadata,
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+    metadata["nested"]["ids"].append("tampered")
+
+    assert receipt.success
+    assert receipt.runtime_evidence["metadata"]["nested"]["ids"] == ("result-1",)
+    with pytest.raises(TypeError):
+        receipt.runtime_evidence["metadata"]["nested"]["id"] = "tampered"
+
+
+def test_receipt_json_export_is_detached_and_serializable():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {"ids": ["result-1"]},
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+    exported = receipt.to_dict()
+
+    assert json.dumps(exported, sort_keys=True)
+    assert DirectiveReceipt.verify_exported_dict(exported)
+    assert DirectiveReceipt.verify_exported_dict(json.loads(json.dumps(exported)))
+    serialized = json.dumps(exported)
+    assert DirectiveReceipt.verify_exported_json(serialized)
+    assert not DirectiveReceipt.verify_exported_json(
+        serialized.replace('"success": true,', '"success": true, "success": false,', 1)
+    )
+    timestamp_pair = f'"timestamp": "{exported["timestamp"]}"'
+    assert not DirectiveReceipt.verify_exported_json(
+        serialized.replace(timestamp_pair, f'{timestamp_pair}, {timestamp_pair}', 1)
+    )
+    exported["unhashed_annotation"] = "cannot be smuggled into a verified receipt"
+    assert not DirectiveReceipt.verify_exported_dict(exported)
+    del exported["unhashed_annotation"]
+    exported["runtime_evidence"]["metadata"]["ids"].append("changed")
+    assert receipt.runtime_evidence["metadata"]["ids"] == ("result-1",)
+    assert not DirectiveReceipt.verify_exported_dict(exported)
+
+
+def test_receipt_json_export_rejects_non_json_numbers():
+    receipt = DirectiveReceipt(
+        plan_hash="plan",
+        directive_type=DirectiveType.SHARD,
+        success=False,
+        runtime_evidence={"value": float("nan")},
+        output_hash="output",
+    )
+
+    with pytest.raises(ValueError):
+        receipt.to_dict()
+    assert not receipt.has_valid_output_hash()
+
+
+@pytest.mark.parametrize("payload", [None, b"{}", "{", "null", "[]", '"text"'])
+def test_exported_json_verifier_fails_closed_on_malformed_roots(payload):
+    assert not DirectiveReceipt.verify_exported_json(payload)
+
+
+def test_exported_json_verifier_fails_closed_on_excessive_nesting():
+    payload = "[" * 1200 + "0" + "]" * 1200
+
+    assert not DirectiveReceipt.verify_exported_json(payload)
+
+
+def test_receipt_output_hash_can_be_checked_after_creation():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    receipt = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+            }
+        }
+    ).execute(plan)
+
+    assert receipt.has_valid_output_hash()
+    inconsistent = DirectiveReceipt(
+        plan_hash=receipt.plan_hash,
+        directive_type=receipt.directive_type,
+        success=receipt.success,
+        runtime_evidence=receipt.runtime_evidence,
+        output_hash="0" * 64,
+    )
+    assert not inconsistent.has_valid_output_hash()
+    with pytest.raises(ValueError, match="output hash is invalid"):
+        inconsistent.to_dict()
+    changed_verdict = DirectiveReceipt(
+        plan_hash=receipt.plan_hash,
+        directive_type=receipt.directive_type,
+        success=not receipt.success,
+        runtime_evidence=receipt.runtime_evidence,
+        output_hash=receipt.output_hash,
+    )
+    changed_type = DirectiveReceipt(
+        plan_hash=receipt.plan_hash,
+        directive_type=DirectiveType.RELAY,
+        success=receipt.success,
+        runtime_evidence=receipt.runtime_evidence,
+        output_hash=receipt.output_hash,
+    )
+    assert not changed_verdict.has_valid_output_hash()
+    assert not changed_type.has_valid_output_hash()
+
+
+def test_receipt_integrity_check_rejects_malformed_digest_fields():
+    receipt = DirectiveReceipt(
+        plan_hash="not-a-sha256-digest",
+        directive_type=DirectiveType.SHARD,
+        success=False,
+        runtime_evidence={},
+        output_hash="0" * 64,
+    )
+
+    assert not receipt.has_valid_output_hash()
+
+
+def test_receipt_integrity_check_rejects_non_boolean_verdict():
+    receipt = DirectiveReceipt(
+        plan_hash="a" * 64,
+        directive_type=DirectiveType.SHARD,
+        success=1,
+        runtime_evidence={},
+        output_hash="0" * 64,
+    )
+
+    assert not receipt.has_valid_output_hash()
+
+
+def test_non_json_handler_evidence_fails_closed_without_serialization_details():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": object(),
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["status"] == "failed"
+    assert receipt.runtime_evidence["error_type"] == "TypeError"
+    assert "not JSON serializable" not in repr(receipt)
+
+
+def test_colliding_json_object_keys_fail_closed_in_handler_evidence():
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": {1: "integer key", "1": "string key"},
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["error_type"] == "ValueError"
+    assert receipt.has_valid_output_hash()
+
+
+def test_cyclic_handler_evidence_fails_closed_without_recursion_leak():
+    metadata = {}
+    metadata["self"] = metadata
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator(
+        {
+            DirectiveType.SHARD: lambda _: {
+                "completed": True,
+                "verification_passed": True,
+                "verification_method": "read-after-write",
+                "evidence_refs": ["shard:db1:42"],
+                "metadata": metadata,
+            }
+        }
+    )
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["error_type"] == "RecursionError"
+    assert receipt.has_valid_output_hash()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"completed": True},
+        {"completed": True, "verification_passed": True},
+        {"completed": True, "verification_passed": True, "verification_method": "read-after-write"},
+        {
+            "completed": True,
+            "verification_passed": 1,
+            "verification_method": "read-after-write",
+            "evidence_refs": ["shard:db1:42"],
+        },
+        {
+            "completed": True,
+            "verification_passed": True,
+            "verification_method": "read-after-write",
+            "evidence_refs": [" "],
+        },
+    ],
+)
+def test_incomplete_or_malformed_proof_never_marks_success(overrides):
+    plan = DirectiveCompiler.parse("shard memory 42")
+    orchestrator = DirectiveOrchestrator()
+    orchestrator.register_handler(DirectiveType.SHARD, lambda _: overrides)
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["completion_state"] == "unverified"
+
+
+def test_handler_exception_does_not_copy_raw_diagnostic_into_receipt():
+    private_marker = "private provider response: synthetic-secret-marker"
+    plan = DirectiveCompiler.parse("relay task to peer node")
+    orchestrator = DirectiveOrchestrator()
+
+    def failing_handler(_):
+        raise RuntimeError(private_marker)
+
+    orchestrator.register_handler(DirectiveType.RELAY, failing_handler)
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["status"] == "failed"
+    assert receipt.runtime_evidence["completion_state"] == "failed"
+    assert receipt.runtime_evidence["error_type"] == "RuntimeError"
+    assert "protected diagnostics" in receipt.runtime_evidence["remaining_work"]
+    assert private_marker not in repr(receipt)
+    assert private_marker not in json.dumps(receipt.to_dict())
+
+
+@pytest.mark.parametrize(
+    "sensitive_key",
+    ["error_message", "access_token", "api_key", "private_key"],
+)
+def test_handler_receipt_redacts_nested_diagnostic_and_credential_fields(sensitive_key):
+    private_marker = "synthetic-secret-marker"
+    plan = DirectiveCompiler.parse("relay task to peer node")
+    orchestrator = DirectiveOrchestrator()
+    proof = {
+        "completed": True,
+        "verification_passed": True,
+        "verification_method": "read-after-write",
+        "evidence_refs": ["relay:leg:42"],
+        "metadata": {sensitive_key: private_marker},
+    }
+    orchestrator.register_handler(DirectiveType.RELAY, lambda _: proof)
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["diagnostic_fields_redacted"] is True
+    assert private_marker not in repr(receipt)
+    assert sensitive_key not in repr(receipt.runtime_evidence)
+    assert private_marker not in json.dumps(receipt.to_dict())
+    assert sensitive_key not in json.dumps(receipt.to_dict())
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["failed", "accepted", "acknowledged", "dispatched", "pending", "queued", "running", "in progress"],
+)
+def test_non_complete_handler_status_cannot_be_overridden_by_completion_flags(status):
+    plan = DirectiveCompiler.parse("relay task to peer node")
+    orchestrator = DirectiveOrchestrator()
+    orchestrator.register_handler(
+        DirectiveType.RELAY,
+        lambda _: {
+            "status": status,
+            "completed": True,
+            "verification_passed": True,
+            "verification_method": "read-after-write",
+            "evidence_refs": ["relay:leg:42"],
+        },
+    )
+
+    receipt = orchestrator.execute(plan)
+
+    assert not receipt.success
+    assert receipt.runtime_evidence["completion_state"] == "unverified"
