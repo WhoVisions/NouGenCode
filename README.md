@@ -246,3 +246,16 @@ available on PYTHONPATH:
 
     python -m pip install -e .
     PYTHONPATH=src python -m pytest tests/test_nougencode_control_plane.py
+
+<!-- nougen:fleet-role:begin (generated from NouGenRelay fleet/manifest.json; edit the manifest, not this block) -->
+## Fleet role
+
+| | |
+|---|---|
+| Role | execution / evidence kernel |
+| Kind | core |
+| Status | canonical |
+| Canonical for | execution-kernel |
+| Visibility | public |
+
+<!-- nougen:fleet-role:end -->
