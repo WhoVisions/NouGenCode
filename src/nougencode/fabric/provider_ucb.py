@@ -38,6 +38,7 @@ class ProviderArm:
     memory_mb: float = 0.0  # resident memory the engine needs on its host
     host: str = ""  # node the engine runs on; memory is checked against this host
     available: bool = True
+    cost_per_call: float = 0.0  # USD per call, for engines billed per generation rather than per token
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,7 @@ class ContextualProviderUCB:
         memory_mb: float = 0.0,
         host: str = "",
         available: bool = True,
+        cost_per_call: float = 0.0,
     ) -> None:
         key = f"{provider_id}:{model_id}"
         self._arms[key] = ProviderArm(
@@ -120,6 +122,7 @@ class ContextualProviderUCB:
             memory_mb=float(memory_mb),
             host=host,
             available=available,
+            cost_per_call=float(cost_per_call),
         )
 
     def set_available(self, provider_id: str, model_id: str, available: bool) -> None:
@@ -315,7 +318,12 @@ class ContextualProviderUCB:
                 rejected.append((key, f"quality lower bound {q_slb:.2f} < {workload.min_quality:.2f} (critical)"))
                 continue
 
-            cost = st.ewma_cost_usd if st.ewma_cost_usd is not None else arm.cost_per_1k_tokens * workload.est_tokens / 1000.0
+            if st.ewma_cost_usd is not None:
+                cost = st.ewma_cost_usd
+            elif arm.cost_per_call > 0:
+                cost = arm.cost_per_call
+            else:
+                cost = arm.cost_per_1k_tokens * workload.est_tokens / 1000.0
             lat_s = (latency if latency is not None else arm.average_latency_ms) / 1000.0
             objective = workload.w_latency * lat_s + workload.w_cost * cost - workload.w_quality * min(q_ucb, 2.0)
             scored.append((objective, key, arm))

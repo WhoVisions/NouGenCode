@@ -6,6 +6,7 @@ from nougencode.fabric.engine import ChangeFabricEngine, ChangeFabricExecutionRe
 from nougencode.fabric.hook_abi import HookABIAdapter, HookPhase, HookContext, HookExecutionResult
 from nougencode.fabric.postflight_outbox import OutboxBackend, PostflightOutbox, OutboxRecord
 from nougencode.fabric.durable_outbox import SQLitePostflightOutbox
+from nougencode.fabric import pixellab
 from nougencode.fabric.provider_ucb import (
     ContextualProviderUCB,
     EngineDecision,
@@ -42,6 +43,7 @@ __all__ = [
     "SQLitePostflightOutbox",
     "OutboxRecord",
     "ContextualProviderUCB",
+    "pixellab",
     "EngineDecision",
     "WorkloadSpec",
     "WorkloadStats",
