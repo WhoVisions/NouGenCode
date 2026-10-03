@@ -408,3 +408,45 @@ def test_full_controller_mission_lifecycle(tmp_path):
             proof.evidence_receipts[0].sha256 = "changed"
 
     asyncio.run(_run())
+
+
+def test_switchboard_ascending_intelligence_ladder():
+    from nougencode.routing.switchboard import IntelligenceTier
+
+    switchboard = Switchboard(prefer_ascending_ladder=True)
+
+    class DummyProvider(CodeProvider):
+        def declares_capability(self, capability: Capability) -> bool:
+            return capability == Capability.IMPLEMENTATION
+
+        async def execute(self, task: TaskNode, context: Dict[str, Any]) -> ProviderResult:
+            return ProviderResult(status=ExecutionStatus.PASS)
+
+    p_frontier = DummyProvider("claude_sonnet", "claude-3-7-sonnet", tier=IntelligenceTier.FRONTIER)
+    p_e4b = DummyProvider("gemma_e4b", "gemma4:e4b-it-qat", tier=IntelligenceTier.E4B_ENGINEER)
+    p_e2b = DummyProvider("gemma_e2b", "gemma4:e2b-it-qat", tier=IntelligenceTier.E2B_WORKER)
+
+    switchboard.register_provider(p_frontier)
+    switchboard.register_provider(p_e4b)
+    switchboard.register_provider(p_e2b)
+
+    task = TaskNode(id="t1", objective="Mechanical transform", capability=Capability.IMPLEMENTATION)
+
+    # 1. Without prior data, lowest tier (E2B) is selected first
+    resolved = switchboard.resolve(Capability.IMPLEMENTATION, task)
+    assert resolved is not None
+    assert resolved.provider_id == "gemma_e2b"
+    assert resolved.tier == IntelligenceTier.E2B_WORKER
+
+    # 2. If escalated with min_tier=E4B_ENGINEER, skips E2B and selects E4B
+    resolved_e4b = switchboard.resolve(Capability.IMPLEMENTATION, task, min_tier=IntelligenceTier.E4B_ENGINEER)
+    assert resolved_e4b is not None
+    assert resolved_e4b.provider_id == "gemma_e4b"
+    assert resolved_e4b.tier == IntelligenceTier.E4B_ENGINEER
+
+    # 3. If escalated to FRONTIER, selects Frontier
+    resolved_frontier = switchboard.resolve(Capability.IMPLEMENTATION, task, min_tier=IntelligenceTier.FRONTIER)
+    assert resolved_frontier is not None
+    assert resolved_frontier.provider_id == "claude_sonnet"
+    assert resolved_frontier.tier == IntelligenceTier.FRONTIER
+
