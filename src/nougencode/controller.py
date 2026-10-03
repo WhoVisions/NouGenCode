@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .arbitration.arbiter import Claim, EvidenceArbiter, EvidenceReceipt, ProofObject
+from .arbitration.unknown_resolver import ConstraintClosureGate, EpistemicRouter, Unknown, UnknownState
 from .context_gate import ContextGate
 from .core.checkpoint import (
     MissionCheckpoint,
@@ -59,6 +60,7 @@ class NouGenCodeController:
         self.test_ladder = TestLadder(repo_root)
         self.context_gate = context_gate or ContextGate()
         self.fanout_governor = fanout_governor or FanoutGovernor()
+        self.constraint_closure_gate = ConstraintClosureGate()
         configured_tracker, configured_postflight = load_configured_adapters(
             load_tracker=tracker_feedback is None,
             load_postflight=postflight_capture is None,
@@ -256,6 +258,35 @@ class NouGenCodeController:
             ))
 
         if repomap is not None and not graph_errors and "context_gate" not in validation_results:
+            # Constraint Closure Gate: strictly forbid generation if required unknowns are unresolved
+            lookup_context = {
+                "repo_root": self.repo_root,
+                "repomap": repomap,
+                "goal": intent.goal,
+                "acceptance": intent.acceptance,
+                "constraints": intent.constraints,
+            }
+            closure_result = self.constraint_closure_gate.evaluate(intent.unknowns, lookup_context)
+            receipts.append(EvidenceReceipt.from_payload(
+                "closure",
+                "constraint_closure_gate",
+                {
+                    "closed": closure_result.closed,
+                    "closure_hash": closure_result.closure_hash,
+                    "blockers": [b.key for b in closure_result.blockers],
+                },
+            ))
+            if not closure_result.closed:
+                validation_results["constraint_closure"] = ExecutionStatus.FAIL
+                claims.append(Claim(
+                    id="c_constraint_closure",
+                    statement="Constraint closure blocked: unresolved required unknowns: " + ", ".join(b.key for b in closure_result.blockers),
+                    severity=1.0,
+                    confidence=1.0,
+                    evidence=[b.key for b in closure_result.blockers],
+                ))
+
+        if repomap is not None and not graph_errors and "context_gate" not in validation_results and "constraint_closure" not in validation_results:
             mission.state = MissionState.PLANNED
             while True:
                 ready = mission.ready_nodes()

@@ -65,7 +65,7 @@ class Intent:
     acceptance: List[str] = field(default_factory=list)
     constraints: List[str] = field(default_factory=list)
     forbidden: List[str] = field(default_factory=list)
-    unknowns: List[str] = field(default_factory=list)
+    unknowns: List[Any] = field(default_factory=list)
 
 
 @dataclass
