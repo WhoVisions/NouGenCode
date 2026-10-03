@@ -53,6 +53,16 @@ def main() -> int:
     p_fabric.add_argument("--lines", type=int, default=0, help="Lines changed")
     p_fabric.add_argument("--json", action="store_true", help="Output summary as JSON")
 
+    p_sweep = subparsers.add_parser(
+        "sweep",
+        help="NouGen Context Mode gate + non-destructive dirty-repo hygiene + skills recursion",
+    )
+    p_sweep.add_argument("roots", nargs="*", type=Path, help="Roots to scan for git repos and SKILL.md (default: cwd)")
+    p_sweep.add_argument("--apply", action="store_true", help="Preserve dirty work as local hygiene/snapshot-* branches (HEAD/index/worktree untouched)")
+    p_sweep.add_argument("--push", action="store_true", help="With --apply: push snapshot branches of verified-PRIVATE repos only")
+    p_sweep.add_argument("--json", action="store_true", help="Output the full report as JSON")
+    p_sweep.add_argument("--no-persist", action="store_true", help="Do not write the summary back to shards")
+
     # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
@@ -65,6 +75,26 @@ def main() -> int:
     args = parser.parse_args()
 
     # Handle Subcommands
+    if args.subcommand == "sweep":
+        import json
+        from . import sweep as sw
+        if args.push and not args.apply:
+            parser.error("--push requires --apply")
+        report = sw.sweep(args.roots or [Path.cwd()], apply=args.apply, push=args.push)
+        persisted = False if args.no_persist else sw.persist(report)
+        if args.json:
+            print(json.dumps(report.to_dict() | {"persisted": persisted}, indent=2, default=str))
+        else:
+            print(report.summary())
+            for r in report.repos:
+                if r.dirty:
+                    extra = f" -> {r.snapshot}{' (pushed)' if r.pushed else ''}" if r.snapshot else ""
+                    print(f"  {r.path} [{r.branch}, {r.visibility}] {r.counts()}{extra}{('  ' + r.note) if r.note else ''}")
+            for i in report.skill_issues[:30]:
+                print(f"  skill {i.skill}: {i.problem}")
+            print(f"persisted to shards: {persisted}")
+        return 0
+
     if args.subcommand == "discover":
         from .discovery.waterflow import WaterflowDiscovery
         hw = WaterflowDiscovery.inspect_hardware()
