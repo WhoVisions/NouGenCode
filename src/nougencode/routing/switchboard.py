@@ -32,12 +32,32 @@ class ProviderResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
+class IntelligenceTier(int, Enum):
+    """
+    Ascending Intelligence Ladder (Level 0 -> Level 5):
+    Use lowest intelligence tier capable of producing verifiable success.
+    """
+    DETERMINISTIC = 0   # Python, Z3, AST Grep, Compilers
+    SYSTEM_ONE = 1      # tev1, nimble, bounded probabilistic choice
+    E2B_WORKER = 2      # gemma4:e2b-it-qat (2.3B eff, 4.3 GB, 0 cost workhorse)
+    E4B_ENGINEER = 3    # gemma4:e4b-it-qat (4.5B eff, 6.1 GB, local reasoning/repair)
+    WORKSTATION = 4     # gemma4:12b/26b local heavy
+    FRONTIER = 5        # Claude, Codex, Gemini 3.1 Pro (Metered API exception handler)
+
+
 class CodeProvider(ABC):
     """Abstract provider adapter decoupling brand identity from role."""
 
-    def __init__(self, provider_id: str, model_id: str) -> None:
+    def __init__(
+        self,
+        provider_id: str,
+        model_id: str,
+        *,
+        tier: IntelligenceTier = IntelligenceTier.FRONTIER,
+    ) -> None:
         self.provider_id = provider_id
         self.model_id = model_id
+        self.tier = tier
 
     @abstractmethod
     def declares_capability(self, capability: Capability) -> bool:
@@ -69,10 +89,11 @@ class CompetenceRecord:
 class Switchboard:
     """Dynamic router mapping task roles to providers via calibrated competence."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, prefer_ascending_ladder: bool = True) -> None:
         self._providers: Dict[str, CodeProvider] = {}
         # Key: (provider_id, capability) -> CompetenceRecord
         self._competence: Dict[tuple, CompetenceRecord] = {}
+        self.prefer_ascending_ladder = prefer_ascending_ladder
 
     def register_provider(self, provider: CodeProvider) -> None:
         self._providers[provider.provider_id] = provider
@@ -89,15 +110,44 @@ class Switchboard:
             return 0.5  # Neutral uncalibrated prior
         return self._competence[key].expected_competence
 
-    def resolve(self, capability: Capability, task: TaskNode) -> Optional[CodeProvider]:
-        """Resolves optimal provider maximizing utility without brand preference."""
+    def resolve(
+        self,
+        capability: Capability,
+        task: TaskNode,
+        *,
+        min_tier: Optional[IntelligenceTier] = None,
+    ) -> Optional[CodeProvider]:
+        """
+        Resolves optimal provider maximizing utility via the Ascending Intelligence Ladder.
+        Prioritizes lowest adequate intelligence tier (E2B -> E4B -> Frontier)
+        calibrated by empirical competence.
+        """
         candidates = [
             p for p in self._providers.values()
             if p.declares_capability(capability)
+            and (min_tier is None or p.tier >= min_tier)
         ]
         if not candidates:
             return None
 
-        # Provider names only break ties; Python's hash is process-randomized.
-        candidates.sort(key=lambda provider: (-self.get_competence(provider.provider_id, capability), provider.provider_id))
+        if self.prefer_ascending_ladder:
+            # Sort by:
+            # 1. Lower intelligence tier first (cheapest / zero-marginal compute)
+            # 2. Higher expected competence within that tier
+            # 3. Provider name as tie-breaker
+            candidates.sort(
+                key=lambda p: (
+                    p.tier.value if isinstance(p.tier, IntelligenceTier) else int(p.tier),
+                    -self.get_competence(p.provider_id, capability),
+                    p.provider_id,
+                )
+            )
+        else:
+            # Traditional pure-competence sort
+            candidates.sort(
+                key=lambda p: (
+                    -self.get_competence(p.provider_id, capability),
+                    p.provider_id,
+                )
+            )
         return candidates[0]
