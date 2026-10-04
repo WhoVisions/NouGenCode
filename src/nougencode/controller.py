@@ -26,6 +26,7 @@ from .core.mission import (
     RuntimeIdentity,
     TaskNode,
 )
+from .cleanup import run_cleanup_pass
 from .repo.cartographer import RepoCartographer
 from .routing.switchboard import (
     CodeProvider,
@@ -50,6 +51,7 @@ class NouGenCodeController:
         tracker_feedback: Optional[TrackerFeedback] = None,
         postflight_capture: Optional[PostflightCapture] = None,
         provider_timeout_s: float = 120.0,
+        cleanup_pass: bool = True,
     ) -> None:
         if provider_timeout_s <= 0:
             raise ValueError("provider_timeout_s must be positive")
@@ -78,6 +80,7 @@ class NouGenCodeController:
         self._tracker_configured = tracker_feedback is not None or configured_tracker is not None
         self._postflight_configured = postflight_capture is not None or configured_postflight is not None
         self.provider_timeout_s = provider_timeout_s
+        self.cleanup_pass = cleanup_pass
 
     @staticmethod
     def _mission_id(identity: RuntimeIdentity, intent: Intent) -> str:
@@ -234,6 +237,35 @@ class NouGenCodeController:
                 evidence=[type(exc).__name__],
             ))
             repomap = None
+
+        # Cleanup pass is the first execution step: rank delete/merge/parameterize/repair candidates
+        # before any provider work. Report-only; a failure is recorded, never fatal.
+        if self.cleanup_pass:
+            try:
+                cleanup = run_cleanup_pass(self.repo_root, top=10)
+                receipts.append(EvidenceReceipt.from_payload(
+                    "cleanup_pass",
+                    "cleanup_scoring_core",
+                    {
+                        "files_scored": cleanup["files_scored"],
+                        "actions": cleanup["actions"],
+                        "rank_by": cleanup["rank_by"],
+                        "proposed": [
+                            {k: p[k] for k in ("file", "action", "action_value", "expected_SG", "requires_review")}
+                            for p in cleanup["proposed"]
+                        ],
+                        "mutations": cleanup["mutations"],
+                    },
+                ))
+            except Exception as exc:
+                validation_results["cleanup_pass"] = ExecutionStatus.INFRA_ERROR
+                claims.append(Claim(
+                    id="c_cleanup_pass",
+                    statement="Cleanup pass could not be computed.",
+                    severity=0.3,
+                    confidence=1.0,
+                    evidence=[type(exc).__name__],
+                ))
 
         graph_errors = mission.task_graph_errors()
         if not mission.task_graph:

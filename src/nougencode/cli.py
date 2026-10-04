@@ -63,6 +63,16 @@ def main() -> int:
     p_sweep.add_argument("--json", action="store_true", help="Output the full report as JSON")
     p_sweep.add_argument("--no-persist", action="store_true", help="Do not write the summary back to shards")
 
+    p_clean = subparsers.add_parser(
+        "cleanup",
+        help="Report-only cleanup pass: rank files by repair priority, redundancy and trust-boundary risk",
+    )
+    p_clean.add_argument("root", nargs="?", default=".", type=Path, help="Repository root (default: cwd)")
+    p_clean.add_argument("--top", type=int, default=15, help="Rows per ranking and proposals shown (default: 15)")
+    p_clean.add_argument("--weights", help="JSON file overriding cleanup weights/thresholds")
+    p_clean.add_argument("--include-tests", action="store_true", help="Score test files too")
+    p_clean.add_argument("--json", action="store_true", help="Output the full report as JSON")
+
     # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
@@ -75,6 +85,26 @@ def main() -> int:
     args = parser.parse_args()
 
     # Handle Subcommands
+    if args.subcommand == "cleanup":
+        import json
+        from .cleanup import load_weights, run_cleanup_pass
+        report = run_cleanup_pass(args.root, weights=load_weights(args.weights),
+                                  include_tests=args.include_tests, top=args.top)
+        if args.json:
+            print(json.dumps(report, indent=2, default=str))
+            return 0
+        print(f"cleanup pass: {report['files_scored']} files, actions {report['actions']}, "
+              f"J(if all accepted)={report['J_if_all_accepted']}, mutations={report['mutations']}")
+        for key in ("RP", "RED", "TBR"):
+            print(f"  top by {key}: " + ", ".join(report["rank_by"][key][:5]))
+        for p in report["proposed"]:
+            review = " [review]" if p["requires_review"] else ""
+            print(f"  {p['action']:<12} {p['action_value']:.3f}  SG={p['expected_SG']:+.2f}  "
+                  f"dID={p['delta_ID']:+.4f}  {p['file']}{review}")
+            print(f"      tests: {'; '.join(p['test_obligations'][:3])}")
+        print(report["note"])
+        return 0
+
     if args.subcommand == "sweep":
         import json
         from . import sweep as sw
