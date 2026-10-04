@@ -143,6 +143,9 @@ The controller runs a bounded path from intent to a proof object:
 
 1. Context Gate preflight records the mission and searches relevant session context.
 2. Repository cartography maps the checkout and its targeted tests.
+   The cleanup pass then ranks every file by repair priority, redundancy and trust-boundary risk
+   and records the proposed DELETE/MERGE/PARAMETERIZE/REPAIR actions as a receipt (report-only;
+   disable with `NouGenCodeController(..., cleanup_pass=False)`).
 3. Task graph validation rejects missing dependencies and cycles before provider work.
 4. The Switchboard chooses a capable provider for each role capability.
 5. The fanout governor bounds each runnable wave; the default is one task at a time.
@@ -193,6 +196,30 @@ The NOUGEN_CONTEXT_DIR environment variable can select a context store. Otherwis
 the Context Gate resolves the current user's home directory at runtime and uses its
 NouGen context folder. NouGenCode does not embed a tenant, account, user folder,
 machine, or repository path.
+
+## Cleanup pass
+
+`nougencode cleanup [root] [--top N] [--weights w.json] [--include-tests] [--json]` scores each
+Python file with the repair/compression objective in `nougencode.cleanup.scoring`:
+
+| score | formula |
+|---|---|
+| ID | `(C*L*G*V*D) / (1 + LOCn + CC + DEP + AS)` |
+| RP | `(S*R*F*B*U) / (1 + K)` |
+| RED | `w1*AST + w2*SEM + w3*IO + w4*TEST + w5*STATE` (best cross-file function match) |
+| DV / MV / PV | `CR+DR+SR+BR+AR-CL-MC`, `(O*CR*SR*RR)/(1+IR)`, `(N*O*STAB)/(1+PE+VR)` |
+| Pdead | `sigmoid(a1*unref + a2*uncov + a3*stale + a4*unreach + a5*unused_export - a6*dynamic_use)` |
+| TBR | `EX*PRIV*MUT*UNSRC*REACH` |
+| SG | sum of relative LOC/CC/DEP/STATE reductions |
+
+The selector takes `argmax(DV, MV, PV, RP)` subject to safety constraints (DELETE needs high
+Pdead, MERGE needs high RED, every DELETE/MERGE and anything with high TBR is flagged for review).
+`refactor_acceptance` is the gate for applying any change: no capability or correctness
+regression, strictly lower complexity, required tests passed (not run counts as failed), no new
+attack surface. Signals come from AST and `git log`; the pass never writes to the repository.
+
+Weights and thresholds are a proposal (the source brief left them unspecified). Override them
+with a JSON file via `--weights` or `NOUGENCODE_CLEANUP_WEIGHTS`; unknown keys are rejected.
 
 ## Repository analysis CLI
 
