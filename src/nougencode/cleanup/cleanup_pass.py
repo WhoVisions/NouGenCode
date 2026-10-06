@@ -171,6 +171,24 @@ def _visit(f: FileFacts, tree: ast.Module) -> None:
                     f.defects += 1
 
 
+def _doc_script_stems(root: Path, limit: int = 2000) -> Set[str]:
+    """Stems of ``*.py`` files mentioned in markdown (e.g. ``scripts/edge_token_tracker.py``)."""
+    stems: Set[str] = set()
+    seen = 0
+    for md in root.rglob("*.md"):
+        if any(part in SKIP_DIRS for part in md.relative_to(root).parts):
+            continue
+        seen += 1
+        if seen > limit:
+            break
+        try:
+            text = md.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        stems.update(re.findall(r"([\w-]+)\.py\b", text))
+    return stems
+
+
 def _jaccard(a: Set[str], b: Set[str]) -> float:
     return len(a & b) / len(a | b) if a and b else 0.0
 
@@ -242,6 +260,10 @@ def run_cleanup_pass(root: str | Path, *, weights: Optional[Dict[str, float]] = 
         if p.exists():
             entry_strings |= set(re.findall(r"[\w.]+", p.read_text(encoding="utf-8", errors="replace")))
 
+    # Dynamic-use evidence from docs: a script named in a SKILL.md/README/docs page is invoked by
+    # command line, not imported, so it must not be scored as unreferenced (false DELETE).
+    doc_stems = _doc_script_stems(root)
+
     # Fan-in: which modules import this one (absolute or by trailing segment for relative imports).
     fan_in: Dict[str, Set[str]] = {f.module: set() for f in facts}
     for f in facts:
@@ -309,7 +331,7 @@ def run_cleanup_pass(root: str | Path, *, weights: Optional[Dict[str, float]] = 
         entry = f.is_entry or leaf in {"__main__", "cli", "conftest", "setup", "__init__"} or f.module in entry_strings
         unreachable = 0.0 if (fin or entry) else 1.0
         unused_export = (len(f.exported - set(all_used)) / len(f.exported)) if f.exported else 0.0
-        dynamic = 1.0 if (f.module in all_strings or leaf in all_strings or f.module in entry_strings) else 0.0
+        dynamic = 1.0 if (f.module in all_strings or leaf in all_strings or f.module in entry_strings or leaf in doc_stems) else 0.0
         pdead = S.dead_probability(unreferenced, 0.0 if covered else 1.0, stale, unreachable, unused_export, dynamic, w)
 
         ex = _level(_matches(f.imports, EXPOSURE_MODS))
