@@ -201,23 +201,19 @@ def _visibility(remote: str, run: Runner) -> str:
 
 def inspect_repo(repo: Path, run: Runner = _run) -> RepoReport:
     g = lambda *a: run(["git", "-C", str(repo), *a], None, 30.0)
-    _, branch = g("rev-parse", "--abbrev-ref", "HEAD")
     rc, remote = g("remote", "get-url", "origin")
     remote = remote.strip() if rc == 0 else ""
-    ahead = behind = 0
-    rc, ab = g("rev-list", "--left-right", "--count", "@{upstream}...HEAD")
-    if rc == 0 and len(ab.split()) == 2:
-        behind, ahead = (int(x) for x in ab.split())
-    _, por = g("status", "--porcelain=v1", "--untracked-files=all")
-    files = []
+    _, por = g("status", "--porcelain=v1", "-b", "--untracked-files=all")
+    branch, ahead, behind, files = "", 0, 0, []
     for line in por.splitlines():
-        if len(line) < 4:
-            continue
-        status, rel = line[:2], line[3:].strip().strip('"')
-        if " -> " in rel:
-            rel = rel.split(" -> ", 1)[1]
-        files.append(DirtyFile(rel, status, classify(repo, rel)))
-    return RepoReport(str(repo), branch.strip(), remote, _visibility(remote, run), ahead, behind, files)
+        if line.startswith("## "):
+            branch = "HEAD" if line.startswith("## HEAD (") else (line[3:].split("...")[0].split() or [""])[-1]
+            ahead = int(m[1]) if (m := re.search(r"\bahead (\d+)", line)) else 0
+            behind = int(m[1]) if (m := re.search(r"\bbehind (\d+)", line)) else 0
+        elif len(line) >= 4:
+            rel = line[3:].strip().strip('"').split(" -> ", 1)[-1]
+            files.append(DirtyFile(rel, line[:2], classify(repo, rel)))
+    return RepoReport(str(repo), branch, remote, _visibility(remote, run), ahead, behind, files)
 
 
 def snapshot(repo: RepoReport, stamp: str) -> Optional[str]:
