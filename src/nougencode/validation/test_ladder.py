@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 import os
 from pathlib import Path
-import subprocess
+import py_compile
 import sys
 import time
 from typing import List, Optional
@@ -56,21 +56,15 @@ class TestLadder:
             )
         for f in files:
             full_path = self.repo_root / f
-            if full_path.suffix == ".py" and full_path.exists():
-                cmd = [sys.executable, "-m", "py_compile", str(full_path)]
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=str(self.repo_root),
-                )
-                stdout, stderr = await proc.communicate()
-                if proc.returncode != 0:
+            if full_path.suffix == ".py":
+                try:
+                    py_compile.compile(str(full_path), doraise=True)
+                except py_compile.PyCompileError as exc:
                     return TestLadderResult(
                         level=TestLevel.LEVEL_0_SYNTAX,
                         status=ExecutionStatus.FAIL,
-                        command=" ".join(cmd),
-                        output=stderr.decode("utf-8", errors="replace"),
+                        command=f"{sys.executable} -m py_compile {full_path}",
+                        output=exc.msg,
                         duration_s=time.time() - t0,
                     )
         return TestLadderResult(
@@ -85,7 +79,6 @@ class TestLadder:
         """Level 1: Exact targeted test file execution."""
         t0 = time.time()
         tout = timeout_s or self.base_timeout_s
-        import sys
         cmd = [sys.executable, "-m", "pytest", test_file]
         env = dict(os.environ)
         env["PYTHONPATH"] = str(self.repo_root / "src")
