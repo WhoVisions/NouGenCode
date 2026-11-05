@@ -363,6 +363,7 @@ def run_golden_slice(task: TaskNode, coverage: CoverageEnvelope, as_of: datetime
     graph.record(task.capability, truth)
     decision = PolicyPlanner().plan(task, graph)
     decision_hash = canonical_decision_hash([decision])
+    coverage_dict = coverage.to_dict()
     event = EventEnvelope(
         mission_id=task.id,
         sequence=0,
@@ -373,7 +374,7 @@ def run_golden_slice(task: TaskNode, coverage: CoverageEnvelope, as_of: datetime
             "task_id": task.id,
             "capability": task.capability.value,
             "truth": truth.status.value,
-            "coverage_id": coverage.to_dict()["coverage_id"],
+            "coverage_id": coverage_dict["coverage_id"],
             "decision_hash": decision_hash,
         },
     )
@@ -383,13 +384,13 @@ def run_golden_slice(task: TaskNode, coverage: CoverageEnvelope, as_of: datetime
         statement="The task policy decision is supported by current evidence.",
         severity=1.0,
         confidence=1.0 if resolved else 0.0,
-        evidence=list(truth.evidence_ids) or [f"coverage:{coverage.to_dict()['coverage_id']}"],
+        evidence=list(truth.evidence_ids) or [f"coverage:{coverage_dict['coverage_id']}"],
         resolved=resolved,
     )
     arbiter_accepts = EvidenceArbiter().evaluate_claims([decision_claim])
     proof = EvidenceReceipt.from_payload("golden_slice", "evidence_arbiter", {
         "event": event.to_dict(),
-        "coverage": coverage.to_dict(),
+        "coverage": coverage_dict,
         "truth": truth.to_dict(),
         "decision": decision.canonical_fields(),
         "decision_hash": decision_hash,
