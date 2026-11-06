@@ -91,7 +91,7 @@ def comprehension_cost(
             + weights.decision * decisions)
 
 
-def _validate(units: Sequence[MeaningUnit], budget: int) -> dict[str, int]:
+def _validate(units: Sequence[MeaningUnit], budget: int) -> None:
     if budget <= 0:
         raise DigestibilityError("budget must be positive")
     positions: dict[str, int] = {}
@@ -112,7 +112,6 @@ def _validate(units: Sequence[MeaningUnit], budget: int) -> dict[str, int]:
             # Keep qualifications with the claim they constrain.
             if dep in unit.qualifies and positions[dep] != i - 1:
                 raise DigestibilityError(f"qualification {dep!r} must immediately precede {unit.unit_id!r}")
-    return positions
 
 
 def partition_units(
@@ -139,39 +138,33 @@ def partition_units(
     if any(value < 0 for value in (fragmentation_penalty, repetition_penalty, balance_weight)):
         raise DigestibilityError("objective penalties must be non-negative")
     reader = reader or ReaderContext()
+    known_terms = set(reader.known_terms)
     n = len(values)
-    positions = {unit.unit_id: i for i, unit in enumerate(values)}
     # Suffix dynamic program: dp[i] is cheapest partition of units[i:].
     dp = [inf] * (n + 1)
     choice = [-1] * n
     dp[n] = 0.0
     for i in range(n - 1, -1, -1):
-        cost = 0
+        known = reader.known_concepts | {c for u in values[:i] for c in u.introduces_concepts}
+        seen_concepts, seen_terms = set(known), set(known_terms)
+        cost = decisions = repeats = 0
         for j in range(i, n):
-            cost += values[j].token_cost
+            u = values[j]
+            cost += u.token_cost
             if cost > max_tokens:
                 break
+            decisions += u.decisions
+            for c in u.introduces_concepts:
+                repeats += c in known
+            seen_concepts.update(u.introduces_concepts)
+            seen_terms.update(u.specialist_terms)
             # Do not split any immediately adjacent qualification pair.
-            if j < n - 1 and (values[j + 1].unit_id in values[j].qualifies
-                               or values[j].unit_id in values[j + 1].qualifies):
+            if j < n - 1 and (values[j + 1].unit_id in u.qualifies
+                               or u.unit_id in values[j + 1].qualifies):
                 continue
-            group = values[i:j + 1]
-            present = {unit.unit_id for unit in group}
-            introduced_before = {concept for unit in values[:i]
-                                 for concept in unit.introduces_concepts}
-            known = reader.known_concepts | introduced_before
-            new_concepts = {concept for unit in group
-                            for concept in unit.introduces_concepts} - known
-            unresolved = {dep for unit in group for dep in unit.depends_on
-                          if positions[dep] > j} - present - known
-            terms = {term for unit in group for term in unit.specialist_terms} - reader.known_terms
-            decisions = sum(unit.decisions for unit in group)
-            reader_cost = (weights.new_concept * len(new_concepts)
-                           + weights.unresolved_dependency * len(unresolved)
-                           + weights.unexplained_term * len(terms)
+            reader_cost = (weights.new_concept * (len(seen_concepts) - len(known))
+                           + weights.unexplained_term * (len(seen_terms) - len(known_terms))
                            + weights.decision * decisions)
-            repeats = sum(1 for unit in group for concept in unit.introduces_concepts
-                          if concept in known)
             balance = balance_weight * ((cost - target) / target) ** 2
             candidate = (reader_cost + repetition_penalty * repeats
                          + fragmentation_penalty + balance + dp[j + 1])
@@ -195,13 +188,9 @@ def verify_plan(units: Sequence[MeaningUnit], plan: ChunkPlan, *, max_tokens: in
     """Structural checks only; this cannot prove human comprehension or truth."""
     expected = [unit.unit_id for unit in units if unit.required]
     actual = [unit_id for chunk in plan.chunks for unit_id in chunk.unit_ids]
-    if actual != expected:
-        return False
-    if any(chunk.token_cost > max_tokens for chunk in plan.chunks):
-        return False
-    if tuple(unit.source_ref for unit in units) != plan.source_refs:
-        return False
-    return True
+    return (actual == expected
+            and all(chunk.token_cost <= max_tokens for chunk in plan.chunks)
+            and tuple(unit.source_ref for unit in units) == plan.source_refs)
 
 
 def verify_rendering(
