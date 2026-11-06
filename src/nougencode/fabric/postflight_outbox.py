@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import threading
-from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Tuple
 
-from nougencode.canonical import canonical_sha256, normalize_timestamp
+from nougencode.canonical import canonical_sha256, canonical_timestamp, normalize_timestamp
 
 
 def _sha256(value: Any) -> str:
     return canonical_sha256(value)
+
+
+def _resolve_timestamp(timestamp: Optional[str]) -> str:
+    return normalize_timestamp(timestamp) if timestamp is not None else canonical_timestamp(datetime.now(timezone.utc))
 
 
 GENESIS_HASH = "0" * 64
@@ -29,15 +33,36 @@ class OutboxRecord:
     status: str = "PENDING"  # PENDING, DELIVERED, FAILED
 
     def verify_integrity(self) -> bool:
-        content = {
-            "sequence": self.sequence,
-            "dedup_key": self.dedup_key,
-            "target_channel": self.target_channel,
-            "payload": self.payload,
-            "created_at": self.created_at,
-            "previous_hash": self.previous_hash,
-        }
-        return _sha256(content) == self.record_hash
+        return _build_record(
+            self.sequence, self.dedup_key, self.target_channel, self.payload, self.created_at, self.previous_hash
+        ).record_hash == self.record_hash
+
+
+def _build_record(
+    sequence: int, dedup_key: str, target_channel: str, payload: Mapping[str, Any], created_at: str, previous_hash: str
+) -> OutboxRecord:
+    record_hash = _sha256({
+        "sequence": sequence,
+        "dedup_key": dedup_key,
+        "target_channel": target_channel,
+        "payload": payload,
+        "created_at": created_at,
+        "previous_hash": previous_hash,
+    })
+    return OutboxRecord(sequence, dedup_key, target_channel, payload, created_at, previous_hash, record_hash)
+
+
+def _verify_chain(records: Iterable[OutboxRecord]) -> Tuple[bool, Optional[str]]:
+    prev = GENESIS_HASH
+    for idx, r in enumerate(records):
+        if r.sequence != idx:
+            return (False, f"Sequence mismatch at index {idx}: expected {idx}, got {r.sequence}")
+        if r.previous_hash != prev:
+            return (False, f"Chain broken at index {idx}: prev_hash mismatch")
+        if not r.verify_integrity():
+            return (False, f"Tampered record at index {idx}: hash verification failed")
+        prev = r.record_hash
+    return (True, None)
 
 
 class OutboxBackend(Protocol):
@@ -50,13 +75,9 @@ class OutboxBackend(Protocol):
         payload: Mapping[str, Any],
         timestamp: Optional[str] = None,
     ) -> Tuple[OutboxRecord, bool]: ...
-
     def mark_delivered(self, dedup_key: str) -> bool: ...
-
     def get_pending(self) -> Sequence[OutboxRecord]: ...
-
     def verify_chain(self) -> Tuple[bool, Optional[str]]: ...
-
     def count(self) -> int: ...
 
 
@@ -80,35 +101,12 @@ class PostflightOutbox:
         with self._lock:
             if dedup_key in self._dedup_index:
                 return (self._dedup_index[dedup_key], False)
-
-            now_str = normalize_timestamp(timestamp) if timestamp is not None else datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
-            seq = len(self._records)
-            prev = self._last_hash
-
-            content = {
-                "sequence": seq,
-                "dedup_key": dedup_key,
-                "target_channel": target_channel,
-                "payload": payload,
-                "created_at": now_str,
-                "previous_hash": prev,
-            }
-            rec_hash = _sha256(content)
-
-            rec = OutboxRecord(
-                sequence=seq,
-                dedup_key=dedup_key,
-                target_channel=target_channel,
-                payload=payload,
-                created_at=now_str,
-                previous_hash=prev,
-                record_hash=rec_hash,
-                status="PENDING",
+            rec = _build_record(
+                len(self._records), dedup_key, target_channel, payload, _resolve_timestamp(timestamp), self._last_hash
             )
-
             self._records.append(rec)
             self._dedup_index[dedup_key] = rec
-            self._last_hash = rec_hash
+            self._last_hash = rec.record_hash
             return (rec, True)
 
     def mark_delivered(self, dedup_key: str) -> bool:
@@ -116,17 +114,7 @@ class PostflightOutbox:
             rec = self._dedup_index.get(dedup_key)
             if not rec:
                 return False
-            # Immutable update in list
-            updated = OutboxRecord(
-                sequence=rec.sequence,
-                dedup_key=rec.dedup_key,
-                target_channel=rec.target_channel,
-                payload=rec.payload,
-                created_at=rec.created_at,
-                previous_hash=rec.previous_hash,
-                record_hash=rec.record_hash,
-                status="DELIVERED",
-            )
+            updated = replace(rec, status="DELIVERED")
             self._records[rec.sequence] = updated
             self._dedup_index[dedup_key] = updated
             return True
@@ -138,16 +126,7 @@ class PostflightOutbox:
     def verify_chain(self) -> Tuple[bool, Optional[str]]:
         """Verify the complete hash-chain integrity."""
         with self._lock:
-            prev = GENESIS_HASH
-            for idx, r in enumerate(self._records):
-                if r.sequence != idx:
-                    return (False, f"Sequence mismatch at index {idx}: expected {idx}, got {r.sequence}")
-                if r.previous_hash != prev:
-                    return (False, f"Chain broken at index {idx}: prev_hash mismatch")
-                if not r.verify_integrity():
-                    return (False, f"Tampered record at index {idx}: hash verification failed")
-                prev = r.record_hash
-            return (True, None)
+            return _verify_chain(self._records)
 
     def count(self) -> int:
         with self._lock:
