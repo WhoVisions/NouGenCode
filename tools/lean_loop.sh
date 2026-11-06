@@ -30,7 +30,11 @@ End your reply with exactly one line: FINDING: <one sentence: what you cut, why 
   OUT=$(agy --print-timeout 25m --dangerously-skip-permissions --model "$MODEL" --add-dir "$REPO" -p "$PROMPT" 2>&1)
   printf '%s\n' "$OUT" | tail -40 > "$HOME/.nougen/state/lean_turn_$i.out"
   FINDING=$(printf '%s\n' "$OUT" | grep -E '^FINDING:' | tail -1 | cut -c10-)
-  if git diff --quiet && [ -z "$(git ls-files -o --exclude-standard)" ]; then
+  if printf '%s' "$OUT" | grep -q 'AGY_ERROR\|credits balance is too low'; then
+    echo "$(date '+%F %I:%M %p') turn $i: agy failed, stopping" >> "$LOG"; git checkout -q -- . && git clean -qfd -- src tests; break
+  fi
+  if [ -z "$FINDING" ] || git diff --quiet -- src; then
+    git checkout -q -- . && git clean -qfd -- src tests
     echo "$(date '+%F %I:%M %p') turn $i: no change" >> "$LOG"; continue
   fi
   NOW=$(passed)
