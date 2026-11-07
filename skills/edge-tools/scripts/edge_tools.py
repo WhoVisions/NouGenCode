@@ -9,15 +9,13 @@ import re
 from google.cloud import storage
 import json
 import io
-from PIL import Image, ImageDraw
-import numpy as np
+from PIL import Image
 import wave
 
 from config import (
-    PROJECT_ID, LOCATION, GCS_BUCKET_PERSISTENT, 
-    GENERATED_IMAGES_DIR, GENERATED_AUDIO_DIR,
+    PROJECT_ID, LOCATION,
     DEFAULT_MODEL, IMAGE_MODEL, VIDEO_MODEL, FLASH_MODEL,
-    LIVE_MODEL, LYRIA_MODEL, EMBEDDING_MODEL, EMBEDDING_MODEL_V1,
+    EMBEDDING_MODEL,
     FILE_SEARCH_STORE_NAME
 )
 

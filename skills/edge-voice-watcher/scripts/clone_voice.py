@@ -2,7 +2,6 @@ import yt_dlp
 import librosa
 import soundfile as sf
 import os
-import numpy as np
 
 URL = "https://www.youtube.com/watch?v=XrgImx12n6U"
 START_TIME = 20 * 60 + 40  # 20:40 -> 1240s

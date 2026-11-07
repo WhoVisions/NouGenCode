@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import atexit
 import ctypes
-import json
 import logging
 import os
 import signal
@@ -33,8 +32,6 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
