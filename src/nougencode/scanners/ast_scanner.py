@@ -25,6 +25,8 @@ class SymbolUsageVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module == "__future__":
+            return  # Compiler directives, not runtime symbol imports
         for alias in node.names:
             if alias.name == "*":
                 continue
@@ -87,7 +89,12 @@ class AstDeadCodeScanner:
 
         # 1. Check Unused Imports
         for imp_name, (lineno, _) in visitor.imports.items():
-            if imp_name not in visitor.used_names and imp_name not in visitor.ignored_names:
+            base_name = imp_name.split(".")[0]
+            if (
+                imp_name not in visitor.used_names
+                and base_name not in visitor.used_names
+                and imp_name not in visitor.ignored_names
+            ):
                 issues.append(
                     CodeIssue(
                         issue_type=IssueType.UNUSED_IMPORT,

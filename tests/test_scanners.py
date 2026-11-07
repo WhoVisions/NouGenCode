@@ -22,6 +22,29 @@ def test_ast_dead_import():
         f_path.unlink()
 
 
+def test_ast_submodule_import_and_future_annotations_not_dead():
+    scanner = AstDeadCodeScanner()
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w+", delete=False, encoding="utf-8") as f:
+        code = (
+            "from __future__ import annotations\n"
+            "import urllib.request\n"
+            "import unused_module\n\n"
+            "def fetch():\n"
+            "    return urllib.request.Request('http://example.com')\n"
+        )
+        f.write(code)
+        f_path = Path(f.name)
+
+    try:
+        issues = scanner.scan_file(f_path)
+        # Only unused_module should be flagged; annotations and urllib.request should be recognized as used/valid
+        assert len(issues) == 1
+        assert issues[0].issue_type == IssueType.UNUSED_IMPORT
+        assert issues[0].symbol_name == "unused_module"
+    finally:
+        f_path.unlink()
+
+
 def test_ast_dead_private_func():
     scanner = AstDeadCodeScanner()
     with tempfile.NamedTemporaryFile(suffix=".py", mode="w+", delete=False, encoding="utf-8") as f:

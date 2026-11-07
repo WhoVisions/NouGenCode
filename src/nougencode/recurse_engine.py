@@ -11,10 +11,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
-import shutil
 from typing import Any, Dict, List, Optional
 
-from .skills_engine import SkillRegistry
 from .context_gate import ContextGate
 
 
