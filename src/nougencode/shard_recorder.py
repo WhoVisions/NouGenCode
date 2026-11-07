@@ -1,8 +1,7 @@
 """Shard recorder for persisting code scan audits into NouGen memory."""
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from .models import ScanSummary
 

@@ -10,10 +10,9 @@ Provides formal mechanics for:
 
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 
 @dataclass

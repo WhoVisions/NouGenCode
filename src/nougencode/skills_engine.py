@@ -9,13 +9,10 @@ Provides the 11-Verb cognitive instruction set across the 6 planes:
 (Memory, Coordination, Observability, Intent, Execution, Learning).
 """
 
-from __future__ import annotations
-
-import json
 import os
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 _FRONTMATTER = re.compile(r"^﻿?---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 _SCALAR = re.compile(r"^([A-Za-z0-9_-]+)\s*:\s*(.*)$")

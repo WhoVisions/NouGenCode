@@ -1,9 +1,8 @@
 """Autonomous tools execution engine for NouGenCode agent."""
 
-import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List
 
 from .context_gate import ContextGate
 

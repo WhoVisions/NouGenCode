@@ -1,7 +1,5 @@
 """Interactive autonomous terminal REPL interface for NouGenCode."""
 
-import os
-import sys
 from pathlib import Path
 from typing import List, Dict
 
