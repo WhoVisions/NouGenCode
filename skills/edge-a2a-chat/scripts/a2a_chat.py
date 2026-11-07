@@ -3,7 +3,6 @@ import json
 import time
 import sys
 import os
-import socket
 import re
 import datetime
 import io
@@ -33,7 +32,6 @@ sys.path.insert(0, r"./data")
 
 try:
     from antigravity_memory import get_conn, search as search_shards
-    from cost_tracker import accumulate_usage
     from hardware_cortex import HardwareCortex
 except ImportError:
     pass

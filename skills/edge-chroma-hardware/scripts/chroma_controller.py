@@ -12,7 +12,7 @@ Requirements:
 import requests
 import time
 import threading
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 

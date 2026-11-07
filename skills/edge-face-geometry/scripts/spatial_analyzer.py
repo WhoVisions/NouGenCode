@@ -20,17 +20,15 @@ Features:
 """
 
 import json
-import re
 import base64
 import io
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Literal, Tuple
-from pathlib import Path
+from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 
 from google import genai
 from google.genai import types
-from PIL import Image as PILImage, ImageDraw, ImageFont, ImageColor
+from PIL import Image as PILImage, ImageDraw, ImageFont
 import numpy as np
 
 

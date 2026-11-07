@@ -6,10 +6,9 @@ Each feature analyzed by separate algorithm, combined for final output.
 
 import asyncio
 import logging
-import numpy as np
 from pathlib import Path
 from PIL import Image
-from typing import Dict, List
+from typing import Dict
 from google import genai
 from google.genai import types
 

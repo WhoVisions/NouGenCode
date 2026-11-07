@@ -1,6 +1,5 @@
 import os
 import json
-import math
 from google import genai
 from google.genai import types
 from PIL import Image
