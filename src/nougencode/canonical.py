@@ -29,16 +29,27 @@ def canonical_timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
+def parse_iso_timestamp(value: Any, field: str = "timestamp") -> datetime:
+    """Parse and validate an ISO 8601 timestamp string with mandatory timezone, converted to UTC."""
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a timezone-qualified ISO string")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field} must be a timezone-qualified ISO string") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field} must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
 def normalize_timestamp(value: str) -> str:
     """Normalize a timezone-qualified ISO timestamp to the canonical UTC form."""
     if not isinstance(value, str):
         raise ValueError("canonical timestamps must be timezone-qualified ISO strings")
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = parse_iso_timestamp(value, "canonical timestamps")
     except ValueError as exc:
         raise ValueError("canonical timestamps must be timezone-qualified ISO strings") from exc
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError("canonical timestamps must include a timezone")
     return canonical_timestamp(parsed)
 
 

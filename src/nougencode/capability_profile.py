@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
+from nougencode.canonical import parse_iso_timestamp
+
 
 SCHEMA_VERSION = "1.0.0"
 SCHEMA_PATH = Path(__file__).with_name("schemas") / "scheduler-capability-profile.schema.json"
@@ -18,15 +20,10 @@ class CapabilityProfileError(ValueError):
 
 
 def _parse_timestamp(value: Any, field: str) -> datetime:
-    if not isinstance(value, str):
-        raise CapabilityProfileError(f"{field} must be an ISO 8601 timestamp")
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parse_iso_timestamp(value, field)
     except ValueError as exc:
         raise CapabilityProfileError(f"{field} must be an ISO 8601 timestamp") from exc
-    if parsed.tzinfo is None:
-        raise CapabilityProfileError(f"{field} must include a timezone")
-    return parsed.astimezone(timezone.utc)
 
 
 def _require_mapping(value: Any, field: str) -> Mapping[str, Any]:

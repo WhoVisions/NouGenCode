@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from nougencode.canonical import canonical_json, canonical_sha256, canonical_timestamp, normalize_timestamp
+from nougencode.canonical import (
+    canonical_json,
+    canonical_sha256,
+    canonical_timestamp,
+    normalize_timestamp,
+    parse_iso_timestamp,
+)
 from nougencode.core.golden_slice import EventEnvelope
 
 
@@ -60,3 +66,19 @@ def test_shared_canonical_v1_vectors():
 
     for vector in fixture["timestamps"]:
         assert normalize_timestamp(vector["input"]) == vector["canonical"], vector["input"]
+
+
+def test_parse_iso_timestamp_valid_and_invalid_inputs():
+    dt = parse_iso_timestamp("2026-09-29T13:00:00-04:00", "test_field")
+    assert dt.tzinfo == timezone.utc
+    assert dt.hour == 17
+    assert dt.minute == 0
+
+    with pytest.raises(ValueError, match="test_field must be a timezone-qualified ISO string"):
+        parse_iso_timestamp(12345, "test_field")
+
+    with pytest.raises(ValueError, match="test_field must be a timezone-qualified ISO string"):
+        parse_iso_timestamp("not-a-timestamp", "test_field")
+
+    with pytest.raises(ValueError, match="test_field must include a timezone"):
+        parse_iso_timestamp("2026-09-29T13:00:00", "test_field")

@@ -9,7 +9,7 @@ import threading
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from nougencode.arbitration.arbiter import Claim, EvidenceArbiter, EvidenceReceipt
-from nougencode.canonical import canonical_json, canonical_sha256, normalize_timestamp
+from nougencode.canonical import canonical_json, canonical_sha256, normalize_timestamp, parse_iso_timestamp
 from nougencode.core.mission import Capability, MutationBudget, TaskNode
 
 
@@ -21,15 +21,7 @@ def _sha256(value: Any) -> str:
 
 
 def _timestamp(value: str, field: str) -> datetime:
-    if not isinstance(value, str):
-        raise ValueError(f"{field} must be a timezone-qualified ISO timestamp")
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError(f"{field} must be a timezone-qualified ISO timestamp") from exc
-    if parsed.tzinfo is None:
-        raise ValueError(f"{field} must include a timezone")
-    return parsed.astimezone(timezone.utc)
+    return parse_iso_timestamp(value, field)
 
 
 @dataclass(frozen=True)
