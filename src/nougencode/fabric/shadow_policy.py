@@ -9,6 +9,8 @@ from decimal import Decimal
 from numbers import Real
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
+from nougencode.canonical import is_ttl_valid
+
 
 @dataclass(frozen=True)
 class PolicyRule:
@@ -21,12 +23,7 @@ class PolicyRule:
     is_blocking: bool = True
 
     def is_valid(self, as_of: Optional[datetime] = None) -> bool:
-        now = (as_of or datetime.now(timezone.utc)).astimezone(timezone.utc)
-        try:
-            created_dt = datetime.fromisoformat(self.created_at.replace("Z", "+00:00"))
-        except Exception:
-            return False
-        return created_dt <= now <= created_dt + timedelta(seconds=self.ttl_seconds)
+        return is_ttl_valid(self.created_at, self.ttl_seconds, as_of)
 
 
 @dataclass(frozen=True)

@@ -10,12 +10,12 @@ silently stringified.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 import hashlib
 import json
 import math
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 
 CANONICAL_JSON_VERSION = "nougen.canonical-json.v1"
@@ -40,6 +40,20 @@ def parse_iso_timestamp(value: Any, field: str = "timestamp") -> datetime:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"{field} must include a timezone")
     return parsed.astimezone(timezone.utc)
+
+
+def is_ttl_valid(
+    timestamp_str: str,
+    ttl_seconds: float,
+    as_of: Optional[datetime] = None,
+) -> bool:
+    """Check if a timestamp string is within its TTL window relative to as_of (default now UTC)."""
+    now = (as_of or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    try:
+        dt = parse_iso_timestamp(timestamp_str)
+    except Exception:
+        return False
+    return dt <= now <= dt + timedelta(seconds=ttl_seconds)
 
 
 def normalize_timestamp(value: str) -> str:

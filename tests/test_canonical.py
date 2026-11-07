@@ -9,6 +9,7 @@ from nougencode.canonical import (
     canonical_json,
     canonical_sha256,
     canonical_timestamp,
+    is_ttl_valid,
     normalize_timestamp,
     parse_iso_timestamp,
 )
@@ -82,3 +83,15 @@ def test_parse_iso_timestamp_valid_and_invalid_inputs():
 
     with pytest.raises(ValueError, match="test_field must include a timezone"):
         parse_iso_timestamp("2026-09-29T13:00:00", "test_field")
+
+
+def test_is_ttl_valid():
+    as_of = datetime(2026, 9, 29, 17, 0, 0, tzinfo=timezone.utc)
+    # Valid within 60s
+    assert is_ttl_valid("2026-09-29T16:59:30Z", 60.0, as_of=as_of) is True
+    # Expired (> 60s ago)
+    assert is_ttl_valid("2026-09-29T16:58:30Z", 60.0, as_of=as_of) is False
+    # Future timestamp (> as_of)
+    assert is_ttl_valid("2026-09-29T17:01:00Z", 60.0, as_of=as_of) is False
+    # Malformed timestamp string returns False safely
+    assert is_ttl_valid("invalid-timestamp", 60.0, as_of=as_of) is False

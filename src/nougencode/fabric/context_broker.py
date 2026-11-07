@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from nougencode.canonical import canonical_sha256
+from nougencode.canonical import canonical_sha256, is_ttl_valid
 
 
 def _canonical_hash(payload: Any) -> str:
@@ -28,12 +28,7 @@ class ContextItem:
     def is_fresh(self, as_of: Optional[datetime] = None) -> bool:
         if self.status != "OBSERVED":
             return False
-        now = (as_of or datetime.now(timezone.utc)).astimezone(timezone.utc)
-        try:
-            obs_dt = datetime.fromisoformat(self.observed_at.replace("Z", "+00:00"))
-        except Exception:
-            return False
-        return obs_dt <= now <= obs_dt + timedelta(seconds=self.freshness_ttl_seconds)
+        return is_ttl_valid(self.observed_at, self.freshness_ttl_seconds, as_of)
 
 
 @dataclass(frozen=True)
