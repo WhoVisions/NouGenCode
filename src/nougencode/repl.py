@@ -53,6 +53,7 @@ class ReplSession:
             f"* **Skills Loaded**: `{len(self.skill_registry.skills)} skills discovered`\n"
             f"* **Commands**:\n"
             f"  * `/scan` : Run AST deadcode, orphan, and dependency bloat scan\n"
+            f"  * `/udct <spec>` : Solve & render Universal Deterministic Code Template (ts/py/rs/go/cpp/cs/kt)\n"
             f"  * `/providers` : Waterflow discovery of local hardware, engines & CLIs\n"
             f"  * `/route <role>` : Resolve optimal provider using empirical posterior\n"
             f"  * `/judge <question>` : Fast System 1 reflex judgment query\n"
@@ -65,6 +66,7 @@ class ReplSession:
             f"  * `/recall <query>` : Search 9-DB NouGenShards memory substrate\n"
             f"  * `/ctx <query>` : Search NouGen session context & tool events\n"
             f"  * `/view <file>` : View file lines (context-clamped)\n"
+            f"  * `/edit <file>::<old>::<new>` : Surgically patch file block\n"
             f"  * `/grep <pattern>` : Deep search codebase\n"
             f"  * `/bash <cmd>` : Execute shell command (context-guarded)\n"
             f"  * `/shard` : Persist recent scan results into NouGen memory\n"
@@ -312,6 +314,47 @@ class ReplSession:
                     target = user_input[6:].strip()
                     res = self.tools.view_file(target)
                     self.console.print(Panel(res, title=f"File: {target}", border_style="blue"))
+                    continue
+
+                if user_input.startswith("/edit "):
+                    parts = user_input[6:].split("::")
+                    if len(parts) != 3:
+                        self.console.print("[yellow]Usage: /edit <file>::<old_text>::<new_text>[/]")
+                    else:
+                        file_path, old_s, new_s = parts[0].strip(), parts[1], parts[2]
+                        res = self.tools.edit_file(file_path, old_s, new_s)
+                        border = "green" if "Successfully" in res else "red"
+                        self.console.print(Panel(res, title=f"Edit: {file_path}", border_style=border))
+                    continue
+
+                if user_input.startswith("/udct"):
+                    from .udct_code import CodeCalculationEngine, DeterministicCodeRenderer, FrameworkType, NormalizedSpec, ProjectType, TargetLanguage
+                    parts = user_input[5:].strip().split()
+                    lang_str = parts[0].lower() if parts else "typescript"
+                    lang_map = {
+                        "ts": TargetLanguage.TYPESCRIPT, "typescript": TargetLanguage.TYPESCRIPT,
+                        "py": TargetLanguage.PYTHON, "python": TargetLanguage.PYTHON,
+                        "rs": TargetLanguage.RUST, "rust": TargetLanguage.RUST,
+                        "go": TargetLanguage.GO, "golang": TargetLanguage.GO,
+                        "cpp": TargetLanguage.CPP, "c++": TargetLanguage.CPP,
+                        "cs": TargetLanguage.CSHARP, "csharp": TargetLanguage.CSHARP,
+                        "kt": TargetLanguage.KOTLIN, "kotlin": TargetLanguage.KOTLIN,
+                    }
+                    target_lang = lang_map.get(lang_str, TargetLanguage.TYPESCRIPT)
+                    p_name = parts[1] if len(parts) > 1 else "FleetService"
+                    spec = NormalizedSpec(
+                        project_name=p_name,
+                        project_type=ProjectType.API_SERVICE,
+                        framework=FrameworkType.FASTAPI if target_lang == TargetLanguage.PYTHON else FrameworkType.NONE,
+                        language=target_lang,
+                        entities=["Session", "Telemetry"],
+                        capabilities=["create", "read", "update"],
+                    )
+                    ir = CodeCalculationEngine.solve_project_ir(spec)
+                    manifest = DeterministicCodeRenderer.render_manifest(ir)
+                    service_preview = DeterministicCodeRenderer.render_service_file("Telemetry", ir.functions, target_lang)
+                    self.console.print(Panel(manifest, title=f"UDCT Spec Manifest ({target_lang.value})", border_style="cyan"))
+                    self.console.print(Panel(service_preview, title=f"Generated {target_lang.value} Service", border_style="green"))
                     continue
 
                 if user_input.startswith("/ctx"):

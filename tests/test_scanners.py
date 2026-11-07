@@ -54,3 +54,16 @@ def test_orphan_scanner():
         assert len(issues) == 1
         assert issues[0].issue_type == IssueType.ORPHAN_FILE
         assert issues[0].symbol_name == "temp_scratch_test.py"
+
+
+def test_tool_executor_surgical_edit():
+    from nougencode.tools import ToolExecutor
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        sample = tmp_path / "sample.py"
+        sample.write_text("def hello():\n    return 'world'\n", encoding="utf-8")
+
+        executor = ToolExecutor(tmp_path)
+        res = executor.edit_file("sample.py", "return 'world'", "return 'nougen'")
+        assert "Successfully patched" in res
+        assert "return 'nougen'" in sample.read_text(encoding="utf-8")

@@ -69,6 +69,27 @@ class ToolExecutor:
         except Exception as e:
             return f"Error writing file: {e}"
 
+    def edit_file(self, file_path: str, old_str: str, new_str: str) -> str:
+        """Surgically patch a contiguous block of text inside a target file."""
+        target = (self.root_dir / file_path).resolve()
+        if not target.exists() or not target.is_file():
+            return f"Error: File '{file_path}' does not exist or is not a file."
+        try:
+            content = target.read_text(encoding="utf-8")
+            if old_str not in content:
+                return f"Error: Target text not found in '{file_path}'."
+            count = content.count(old_str)
+            updated = content.replace(old_str, new_str, 1)
+            target.write_text(updated, encoding="utf-8")
+            self.context_gate.log_event(
+                f"edit_file:{file_path}",
+                f"Replaced 1 of {count} match(es)",
+                {"old_len": len(old_str), "new_len": len(new_str)},
+            )
+            return f"Successfully patched '{file_path}' (1 replacement made)."
+        except Exception as e:
+            return f"Error editing file: {e}"
+
     def run_bash(self, command: str) -> str:
         try:
             res = subprocess.run(
