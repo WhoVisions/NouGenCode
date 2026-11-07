@@ -1,10 +1,10 @@
 """Orphan file and obsolete root script scanner."""
 
-import re
 from pathlib import Path
-from typing import List, Set
+from typing import List
 
 from ..models import CodeIssue, IssueType
+from .dep_scanner import collect_imported_modules
 
 
 class OrphanFileScanner:
@@ -22,18 +22,8 @@ class OrphanFileScanner:
         # Map stems and full filenames
         file_stems = {f.stem: f for f in py_files}
 
-        # Gather references across all python files
-        all_referenced_names: Set[str] = set()
-        for f in self.root_dir.rglob("*.py"):
-            if ".venv" in f.parts or "node_modules" in f.parts or ".git" in f.parts:
-                continue
-            try:
-                text = f.read_text(encoding="utf-8", errors="ignore")
-                # Look for imports like `import foo` or `from foo import ...`
-                for match in re.finditer(r"\b(?:import|from)\s+([a-zA-Z0-9_]+)", text):
-                    all_referenced_names.add(match.group(1))
-            except Exception:
-                pass
+        # Gather references across all python files using shared collector
+        all_referenced_names = collect_imported_modules(self.root_dir, lowercase=False)
 
         # Check root files
         for stem, path in file_stems.items():

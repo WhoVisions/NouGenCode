@@ -138,3 +138,31 @@ dependencies = [
         assert issues[0].issue_type == IssueType.UNUSED_DEPENDENCY
         assert issues[0].symbol_name == "bloated_lib"
 
+
+def test_collect_imported_modules_and_package_mappings():
+    from nougencode.scanners.dep_scanner import collect_imported_modules, PACKAGE_IMPORT_MAPPING
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        # File in root
+        (tmp_path / "mod_a.py").write_text("import yaml\nfrom google.genai import types\n", encoding="utf-8")
+        # File in subfolder
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "mod_b.py").write_text("import sf\nimport psutil\n", encoding="utf-8")
+        # Excluded folder
+        venv = tmp_path / ".venv"
+        venv.mkdir()
+        (venv / "ignored.py").write_text("import ignored_pkg\n", encoding="utf-8")
+
+        mods = collect_imported_modules(tmp_path, lowercase=True)
+        assert "yaml" in mods
+        assert "google" in mods
+        assert "sf" in mods
+        assert "psutil" in mods
+        assert "ignored_pkg" not in mods
+
+        # Check package mappings
+        assert PACKAGE_IMPORT_MAPPING["soundfile"] == "sf"
+        assert PACKAGE_IMPORT_MAPPING["psutil"] == "psutil"
+

@@ -13,6 +13,8 @@ except ImportError:
 
 from ..models import CodeIssue, IssueType
 
+EXCLUDED_SCAN_DIRS: Set[str] = {".venv", "node_modules", ".git", "__pycache__"}
+
 PACKAGE_IMPORT_MAPPING: Dict[str, str] = {
     "pyyaml": "yaml",
     "python_dotenv": "dotenv",
@@ -25,7 +27,29 @@ PACKAGE_IMPORT_MAPPING: Dict[str, str] = {
     "opencv_python": "cv2",
     "beautifulsoup4": "bs4",
     "apache_beam": "apache_beam",
+    "protobuf": "google",
+    "psutil": "psutil",
+    "yt_dlp": "yt_dlp",
+    "soundfile": "sf",
 }
+
+
+def collect_imported_modules(root_dir: Path, lowercase: bool = True) -> Set[str]:
+    """Collect all imported root modules across python files in root_dir."""
+    imported_modules: Set[str] = set()
+    for f in root_dir.rglob("*.py"):
+        if any(p in f.parts for p in EXCLUDED_SCAN_DIRS):
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="ignore")
+            for match in re.finditer(r"\b(?:import|from)\s+([a-zA-Z0-9_]+)", text):
+                mod = match.group(1)
+                if lowercase:
+                    mod = mod.lower().replace("-", "_")
+                imported_modules.add(mod)
+        except Exception:
+            pass
+    return imported_modules
 
 
 class DependencyScanner:
@@ -112,16 +136,7 @@ class DependencyScanner:
             return issues
 
         # 3. Collect imported modules across repository
-        imported_modules: Set[str] = set()
-        for f in self.root_dir.rglob("*.py"):
-            if any(p in f.parts for p in (".venv", "node_modules", ".git", "__pycache__")):
-                continue
-            try:
-                text = f.read_text(encoding="utf-8", errors="ignore")
-                for match in re.finditer(r"^\s*(?:import|from)\s+([a-zA-Z0-9_]+)", text, re.MULTILINE):
-                    imported_modules.add(match.group(1).lower().replace("-", "_"))
-            except Exception:
-                pass
+        imported_modules = collect_imported_modules(self.root_dir, lowercase=True)
 
         # 4. Identify packages declared but never imported
         for pkg, source_file in sorted(declared_files.items()):
