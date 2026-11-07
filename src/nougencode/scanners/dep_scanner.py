@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 try:
     import tomllib

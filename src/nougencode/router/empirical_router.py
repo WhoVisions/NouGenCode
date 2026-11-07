@@ -11,8 +11,8 @@ And posterior belief updates:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, Optional, Tuple
 
 from nougencode.discovery.waterflow import ProviderCapability
 from nougencode.roles.contracts import EngineeringRole

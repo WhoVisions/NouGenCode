@@ -1,6 +1,5 @@
 """Console reporter and rich HUD for NouGenCode."""
 
-import json
 from typing import Optional
 from rich.console import Console
 from rich.table import Table

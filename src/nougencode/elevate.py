@@ -20,13 +20,13 @@ import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .context_gate import ContextGate
 from .cleanup import run_cleanup_pass
 from .scanners.ast_scanner import AstDeadCodeScanner
 from .scanners.orphan_scanner import OrphanFileScanner
-from .security.invariants import ConcentricSecurityGate, SecurityViolation
+from .security.invariants import ConcentricSecurityGate
 from .udct_code import (
     CodeCalculationEngine,
     DeterministicCodeRenderer,
