@@ -1,6 +1,5 @@
 import asyncio
 import os
-import sys
 
 # Set env for local running
 os.environ["GOOGLE_CLOUD_PROJECT"] = "gen-lang-client-0939852539" # NodeWorker project

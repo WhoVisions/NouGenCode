@@ -1,7 +1,6 @@
 import os
 import json
-import glob
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 BRAIN_DIR = str(Path.home() / ".gemini" / "antigravity" / "brain")

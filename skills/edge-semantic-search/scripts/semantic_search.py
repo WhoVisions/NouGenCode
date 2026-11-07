@@ -8,7 +8,7 @@ import json
 import sqlite3
 import hashlib
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from google import genai
 from google.genai import types
 

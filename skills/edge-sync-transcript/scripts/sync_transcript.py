@@ -1,7 +1,5 @@
 import os
 import requests
-import json
-import re
 
 TRANSCRIPT_PATH = r"./logs/transcript.log"
 MESH_URL = "http://localhost:8765/memory/store"

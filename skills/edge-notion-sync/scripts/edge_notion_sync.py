@@ -1,9 +1,7 @@
-import os
 import toml
 import json
-import time
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 try:
     from notion_client import Client
 except ImportError:
@@ -14,22 +12,6 @@ except ImportError:
 ROOT = Path(__file__).parent.parent
 CONFIG_PATH = ROOT / "EdgeNode" / "config" / "notion.toml"
 WORLDS_ROOT = ROOT / "lore" / "worlds"
-
-
-def _retry_request(func, max_retries=3, base_delay=1.0):
-    """Retry with exponential backoff for rate limits (429)."""
-    import requests
-    for attempt in range(max_retries):
-        try:
-            return func()
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429 and attempt < max_retries - 1:
-                delay = base_delay * (2 ** attempt)
-                print(f"   ⏳ Rate limited. Retrying in {delay:.1f}s...")
-                time.sleep(delay)
-            else:
-                raise
-    return None
 
 
 class NotionBridge:
@@ -59,13 +41,6 @@ class NotionBridge:
         except Exception as e:
             print(f"❌ Connection failed: {e}")
             return False
-
-    def _get_title(self, props: dict) -> str:
-        """Robustly extract title from Notion properties."""
-        for key in ["Name", "Title", "Page"]:
-            if key in props and props[key]["title"]:
-                return props[key]["title"][0]["plain_text"]
-        return "Untitled"
 
     def _extract_properties(self, props: dict) -> dict:
         """

@@ -2,8 +2,6 @@
 Google Workspace OAuth Flow for NodeWorker
 Run once to authenticate and save refresh token.
 """
-import os
-import json
 from pathlib import Path
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
