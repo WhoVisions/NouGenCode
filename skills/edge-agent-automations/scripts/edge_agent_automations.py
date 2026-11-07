@@ -14,13 +14,16 @@ import requests
 import toml
 
 class VeilVerseAutomator:
-    def __init__(self):
-        config_path = ROOT / "EdgeNode" / "config" / "notion.toml"
-        self.config = toml.load(config_path)
-        self.token = self.config["notion"]["token"]
-        self.universe_ds = self.config["databases"]["universe_ds"]
-        self.ingestion_ds = self.config["databases"]["ingestion_ds"]
-        self.universe_db = self.config["databases"]["universe_db"]
+    def __init__(self, node_dir: str = "EdgeNode"):
+        config_path = ROOT / node_dir / "config" / "notion.toml"
+        if config_path.exists():
+            self.config = toml.load(config_path)
+        else:
+            self.config = {"notion": {"token": ""}, "databases": {"universe_ds": "", "ingestion_ds": "", "universe_db": ""}}
+        self.token = self.config.get("notion", {}).get("token", "")
+        self.universe_ds = self.config.get("databases", {}).get("universe_ds", "")
+        self.ingestion_ds = self.config.get("databases", {}).get("ingestion_ds", "")
+        self.universe_db = self.config.get("databases", {}).get("universe_db", "")
         
         self.headers = {
             "Authorization": f"Bearer {self.token}",
