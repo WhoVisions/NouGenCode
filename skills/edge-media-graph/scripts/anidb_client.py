@@ -14,10 +14,9 @@ import xml.etree.ElementTree as ET
 import aiohttp
 import asyncio
 import logging
-import os
 import time
 from pathlib import Path
-from typing import List, Dict, Optional, Union
+from typing import List, Dict
 from dataclasses import dataclass
 
 # Configure logging

@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 import json
@@ -11,10 +10,6 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from EdgeNode.services.notion import NotionService, retry_with_backoff
-from EdgeNode.story.docs_export import get_file_link # Although we use it for local docs, keeping for parity
-from google import genai
-from google.genai import types
-from EdgeNode.core.config import PROJECT_ID
 
 # Direct import of helper from ingest_youtube if possible, else we redefine
 try:

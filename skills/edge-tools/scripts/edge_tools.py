@@ -108,7 +108,7 @@ def batch_get_embeddings(texts: list, model: str = EMBEDDING_MODEL, task_type: s
 
 # --- Semantic Retriever (File Search Store) ---
 
-def create_edge-search_store(display_name: str = "edge-Ai Brain") -> str:
+def create_edge_search_store(display_name: str = "edge-Ai Brain") -> str:
     """Creates a new File Search Store (Semantic Retriever corpus)."""
     safe_print(f"\n[RETRIEVER] Creating Store: {display_name}")
     try:
@@ -146,7 +146,7 @@ def upload_knowledge_to_store(file_path: str, store_name: str = None, display_na
         safe_print(f"{Colors.ERROR_RED}[ERROR] Upload failed: {e}{Colors.RESET}")
         return ""
 
-def list_edge-stores() -> list:
+def list_edge_stores() -> list:
     """Lists all available knowledge stores."""
     try:
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -156,7 +156,7 @@ def list_edge-stores() -> list:
         safe_print(f"{Colors.ERROR_RED}[ERROR] List stores failed: {e}{Colors.RESET}")
         return []
 
-def query_edge-knowledge(query: str, store_name: str = None) -> str:
+def query_edge_knowledge(query: str, store_name: str = None) -> str:
     """Performs a semantic search query against the File Search Store."""
     if not store_name:
         store_name = f"fileSearchStores/{FILE_SEARCH_STORE_NAME}"
@@ -184,7 +184,7 @@ def query_edge-knowledge(query: str, store_name: str = None) -> str:
 
 # --- Context Caching ---
 
-def create_edge-cache(content: str, model: str = FLASH_MODEL, ttl_minutes: int = 60) -> str:
+def create_edge_cache(content: str, model: str = FLASH_MODEL, ttl_minutes: int = 60) -> str:
     """
     Creates a cached content object for long system prompts or character blueprints.
     Reduces latency and cost for repeated high-token requests.
