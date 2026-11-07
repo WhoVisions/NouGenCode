@@ -2,8 +2,9 @@ import os
 import json
 import glob
 from datetime import datetime, timedelta
+from pathlib import Path
 
-BRAIN_DIR = r"C:\Users\super\.gemini\antigravity\brain"
+BRAIN_DIR = str(Path.home() / ".gemini" / "antigravity" / "brain")
 SHARDS_DIR = r"./data/shards"
 
 def export_sessions(limit=None):

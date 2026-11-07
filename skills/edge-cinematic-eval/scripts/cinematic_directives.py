@@ -9,7 +9,7 @@ def ingest_pdf():
     PROJECT_ID = os.environ.get("PROJECT_ID", "default-project")
     client = genai.Client(vertexai=True, project=PROJECT_ID, location="global")
     
-    pdf_path = r"c:\Users\super\Downloads\Studying_Contemporary_American_Film_A_Guide_To_Movie_Analysis_Thomas_Elsaesser__Warren_Buckl.pdf"
+    pdf_path = str(Path.home() / "Downloads" / "Studying_Contemporary_American_Film_A_Guide_To_Movie_Analysis_Thomas_Elsaesser__Warren_Buckl.pdf")
     
     if not os.path.exists(pdf_path):
         print(f"File not found: {pdf_path}")

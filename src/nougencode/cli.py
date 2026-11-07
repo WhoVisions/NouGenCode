@@ -67,6 +67,15 @@ def main() -> int:
     p_clean.add_argument("--include-tests", action="store_true", help="Score test files too")
     p_clean.add_argument("--json", action="store_true", help="Output the full report as JSON")
 
+    p_elev = subparsers.add_parser(
+        "elevate",
+        help="Execute 24/7 autonomous hardening & elevation cadence (tests, invariants, dead code, cleanup, UDCT, shards)",
+    )
+    p_elev.add_argument("root", nargs="?", default=".", type=Path, help="Target repository root (default: cwd)")
+    p_elev.add_argument("--json", action="store_true", help="Output elevation report as JSON")
+    p_elev.add_argument("--apply", action="store_true", help="Apply auto-repairs to path leaks and unused imports")
+    p_elev.add_argument("--no-persist", action="store_true", help="Skip persisting elevation telemetry to NouGen Shards")
+
     # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
@@ -97,6 +106,16 @@ def main() -> int:
             print(f"      tests: {'; '.join(p['test_obligations'][:3])}")
         print(report["note"])
         return 0
+
+    if args.subcommand == "elevate":
+        from .elevate import ElevationEngine
+        engine = ElevationEngine(args.root)
+        report = engine.run_elevation(apply_repairs=args.apply, persist=not args.no_persist)
+        if args.json:
+            print(json.dumps(report.to_dict(), indent=2))
+        else:
+            print(report.to_markdown())
+        return 0 if report.is_healthy else 1
 
     if args.subcommand == "sweep":
         from . import sweep as sw

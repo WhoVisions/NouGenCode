@@ -7,8 +7,8 @@ from pathlib import Path
 
 # CONFIG
 DB_PATH = r"./data/memory.db"
-BRAIN_DIR = r"C:\Users\super\.gemini\antigravity\brain"
-TMP_CHAT_DIR = r"C:\Users\super\.gemini\tmp\super\chats"
+BRAIN_DIR = str(Path.home() / ".gemini" / "antigravity" / "brain")
+TMP_CHAT_DIR = str(Path.home() / ".gemini" / "tmp" / "super" / "chats")
 
 class ShardInjector:
     def __init__(self, dry_run=True, limit=None):
