@@ -1,66 +1,29 @@
 """NouGenCode Change Fabric package."""
 
-from nougencode.fabric.change_contract import ChangeContract, FunctionalRequirement, ReviewConstraint
-from nougencode.fabric.context_broker import ContextBroker, ContextItem, CoherenceReport
-from nougencode.fabric.engine import ChangeFabricEngine, ChangeFabricExecutionResult
-from nougencode.fabric.hook_abi import HookABIAdapter, HookPhase, HookContext, HookExecutionResult
-from nougencode.fabric.postflight_outbox import OutboxBackend, PostflightOutbox, OutboxRecord
-from nougencode.fabric.durable_outbox import SQLitePostflightOutbox
-from nougencode.fabric import pixellab
-from nougencode.fabric.provider_ucb import (
-    ContextualProviderUCB,
-    EngineDecision,
-    ProviderArm,
-    RouteDecision,
-    WorkloadSpec,
-    WorkloadStats,
-)
-from nougencode.fabric.shadow_policy import ShadowPolicyReplayer, PolicyRule, ExecutionTrace, ReplayReport
-from nougencode.fabric.telemetry import (
-    OTelTelemetryTracer,
-    TelemetrySpan,
-    OTEL_GENERAL_SEMCONV_VERSION,
-    OTEL_GENAI_SEMCONV_VERSION,
-)
-from nougencode.fabric.selector import InformationGainTestSelector, TestMetadata, SelectedTest
-from nougencode.fabric.syntax_guard import SyntaxHealer, SyntaxHealResult, syntax_auto_fix_tool_hook
+import importlib
 
-__all__ = [
-    "ChangeContract",
-    "FunctionalRequirement",
-    "ReviewConstraint",
-    "ContextBroker",
-    "ContextItem",
-    "CoherenceReport",
-    "ChangeFabricEngine",
-    "ChangeFabricExecutionResult",
-    "HookABIAdapter",
-    "HookPhase",
-    "HookContext",
-    "HookExecutionResult",
-    "PostflightOutbox",
-    "OutboxBackend",
-    "SQLitePostflightOutbox",
-    "OutboxRecord",
-    "ContextualProviderUCB",
-    "pixellab",
-    "EngineDecision",
-    "WorkloadSpec",
-    "WorkloadStats",
-    "ProviderArm",
-    "RouteDecision",
-    "ShadowPolicyReplayer",
-    "PolicyRule",
-    "ExecutionTrace",
-    "ReplayReport",
-    "OTelTelemetryTracer",
-    "TelemetrySpan",
-    "OTEL_GENERAL_SEMCONV_VERSION",
-    "OTEL_GENAI_SEMCONV_VERSION",
-    "InformationGainTestSelector",
-    "TestMetadata",
-    "SelectedTest",
-    "SyntaxHealer",
-    "SyntaxHealResult",
-    "syntax_auto_fix_tool_hook",
-]
+_MODULES = {
+    "change_contract": ("ChangeContract", "FunctionalRequirement", "ReviewConstraint"),
+    "context_broker": ("ContextBroker", "ContextItem", "CoherenceReport"),
+    "engine": ("ChangeFabricEngine", "ChangeFabricExecutionResult"),
+    "hook_abi": ("HookABIAdapter", "HookPhase", "HookContext", "HookExecutionResult"),
+    "postflight_outbox": ("PostflightOutbox", "OutboxBackend", "OutboxRecord"),
+    "durable_outbox": ("SQLitePostflightOutbox",),
+    "pixellab": ("pixellab",),
+    "provider_ucb": ("ContextualProviderUCB", "EngineDecision", "WorkloadSpec", "WorkloadStats", "ProviderArm", "RouteDecision"),
+    "shadow_policy": ("ShadowPolicyReplayer", "PolicyRule", "ExecutionTrace", "ReplayReport"),
+    "telemetry": ("OTelTelemetryTracer", "TelemetrySpan", "OTEL_GENERAL_SEMCONV_VERSION", "OTEL_GENAI_SEMCONV_VERSION"),
+    "selector": ("InformationGainTestSelector", "TestMetadata", "SelectedTest"),
+    "syntax_guard": ("SyntaxHealer", "SyntaxHealResult", "syntax_auto_fix_tool_hook"),
+}
+_EXPORTS = {name: mod for mod, names in _MODULES.items() for name in names}
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    mod = importlib.import_module(f".{_EXPORTS[name]}", __name__)
+    val = mod if name == "pixellab" else getattr(mod, name)
+    globals()[name] = val
+    return val

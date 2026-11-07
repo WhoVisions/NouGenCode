@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
 import threading
 from typing import Any, Iterator, Mapping, Optional, Sequence, Tuple
 
-from nougencode.canonical import canonical_json, normalize_timestamp
-from nougencode.fabric.postflight_outbox import GENESIS_HASH, OutboxRecord, _sha256
+from nougencode.canonical import canonical_json
+from nougencode.fabric.postflight_outbox import (
+    GENESIS_HASH,
+    OutboxRecord,
+    _build_record,
+    _resolve_timestamp,
+    _verify_chain,
+)
+
+_SELECT_RECORD = (
+    "SELECT sequence, dedup_key, target_channel, payload_json, "
+    "created_at, previous_hash, record_hash, status FROM postflight_outbox"
+)
 
 
 class SQLitePostflightOutbox:
@@ -55,16 +65,7 @@ class SQLitePostflightOutbox:
 
     @staticmethod
     def _record(row: tuple[Any, ...]) -> OutboxRecord:
-        return OutboxRecord(
-            sequence=row[0],
-            dedup_key=row[1],
-            target_channel=row[2],
-            payload=json.loads(row[3]),
-            created_at=row[4],
-            previous_hash=row[5],
-            record_hash=row[6],
-            status=row[7],
-        )
+        return OutboxRecord(row[0], row[1], row[2], json.loads(row[3]), *row[4:])
 
     def append(
         self,
@@ -81,19 +82,11 @@ class SQLitePostflightOutbox:
         if not isinstance(payload, Mapping):
             raise ValueError("payload must be an object")
         payload_json = canonical_json(payload)
-        created_at = (
-            normalize_timestamp(timestamp)
-            if timestamp is not None
-            else normalize_timestamp(datetime.now(timezone.utc).isoformat())
-        )
+        created_at = _resolve_timestamp(timestamp)
 
         with self._lock, self._connection() as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
-            duplicate = connection.execute(
-                "SELECT sequence, dedup_key, target_channel, payload_json, created_at, previous_hash, record_hash, status "
-                "FROM postflight_outbox WHERE dedup_key = ?",
-                (dedup_key,),
-            ).fetchone()
+            duplicate = connection.execute(f"{_SELECT_RECORD} WHERE dedup_key = ?", (dedup_key,)).fetchone()
             if duplicate is not None:
                 return self._record(duplicate), False
 
@@ -102,32 +95,14 @@ class SQLitePostflightOutbox:
             ).fetchone()
             sequence = previous[0] + 1 if previous is not None else 0
             previous_hash = previous[1] if previous is not None else GENESIS_HASH
-            canonical_payload = json.loads(payload_json)
-            content = {
-                "sequence": sequence,
-                "dedup_key": dedup_key,
-                "target_channel": target_channel,
-                "payload": canonical_payload,
-                "created_at": created_at,
-                "previous_hash": previous_hash,
-            }
-            record_hash = _sha256(content)
+            rec = _build_record(sequence, dedup_key, target_channel, json.loads(payload_json), created_at, previous_hash)
             connection.execute(
                 "INSERT INTO postflight_outbox "
                 "(sequence, dedup_key, target_channel, payload_json, created_at, previous_hash, record_hash, status) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')",
-                (sequence, dedup_key, target_channel, payload_json, created_at, previous_hash, record_hash),
+                (sequence, dedup_key, target_channel, payload_json, created_at, previous_hash, rec.record_hash),
             )
-            return OutboxRecord(
-                sequence=sequence,
-                dedup_key=dedup_key,
-                target_channel=target_channel,
-                payload=canonical_payload,
-                created_at=created_at,
-                previous_hash=previous_hash,
-                record_hash=record_hash,
-                status="PENDING",
-            ), True
+            return rec, True
 
     def mark_delivered(self, dedup_key: str) -> bool:
         with self._lock, self._connection() as connection, connection:
@@ -139,29 +114,13 @@ class SQLitePostflightOutbox:
 
     def get_pending(self) -> Sequence[OutboxRecord]:
         with self._connection() as connection:
-            rows = connection.execute(
-                "SELECT sequence, dedup_key, target_channel, payload_json, created_at, previous_hash, record_hash, status "
-                "FROM postflight_outbox WHERE status = 'PENDING' ORDER BY sequence"
-            ).fetchall()
+            rows = connection.execute(f"{_SELECT_RECORD} WHERE status = 'PENDING' ORDER BY sequence").fetchall()
         return tuple(self._record(row) for row in rows)
 
     def verify_chain(self) -> Tuple[bool, Optional[str]]:
         with self._connection() as connection:
-            rows = connection.execute(
-                "SELECT sequence, dedup_key, target_channel, payload_json, created_at, previous_hash, record_hash, status "
-                "FROM postflight_outbox ORDER BY sequence"
-            ).fetchall()
-        previous_hash = GENESIS_HASH
-        for expected_sequence, row in enumerate(rows):
-            record = self._record(row)
-            if record.sequence != expected_sequence:
-                return False, f"Sequence mismatch at index {expected_sequence}: expected {expected_sequence}, got {record.sequence}"
-            if record.previous_hash != previous_hash:
-                return False, f"Chain broken at index {expected_sequence}: prev_hash mismatch"
-            if not record.verify_integrity():
-                return False, f"Tampered record at index {expected_sequence}: hash verification failed"
-            previous_hash = record.record_hash
-        return True, None
+            rows = connection.execute(f"{_SELECT_RECORD} ORDER BY sequence").fetchall()
+        return _verify_chain(self._record(row) for row in rows)
 
     def count(self) -> int:
         with self._connection() as connection:

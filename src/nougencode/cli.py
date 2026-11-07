@@ -1,16 +1,10 @@
 """Command-line interface for NouGenCode."""
 
 import argparse
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-
-from .models import ScanSummary
-from .scanners.ast_scanner import AstDeadCodeScanner
-from .scanners.orphan_scanner import OrphanFileScanner
-from .scanners.dep_scanner import DependencyScanner
-from .reporters.console import ConsoleReporter
-from .shard_recorder import ShardRecorder
 
 
 def main() -> int:
@@ -86,7 +80,6 @@ def main() -> int:
 
     # Handle Subcommands
     if args.subcommand == "cleanup":
-        import json
         from .cleanup import load_weights, run_cleanup_pass
         report = run_cleanup_pass(args.root, weights=load_weights(args.weights),
                                   include_tests=args.include_tests, top=args.top)
@@ -106,7 +99,6 @@ def main() -> int:
         return 0
 
     if args.subcommand == "sweep":
-        import json
         from . import sweep as sw
         if args.push and not args.apply:
             parser.error("--push requires --apply")
@@ -130,7 +122,6 @@ def main() -> int:
         hw = WaterflowDiscovery.inspect_hardware()
         providers = WaterflowDiscovery.discover_providers()
         if args.json:
-            import json
             print(json.dumps({
                 "hardware": hw.__dict__,
                 "providers": {k: v.__dict__ for k, v in providers.items()},
@@ -144,7 +135,6 @@ def main() -> int:
         return 0
 
     if args.subcommand == "git-state":
-        import json
         from .repo.git_state import EXIT_CODES, inspect, render
         gs = inspect(args.repo_path)
         print(json.dumps(gs.to_dict(), indent=2) if (args.git_json or args.json) else render(gs))
@@ -190,8 +180,6 @@ def main() -> int:
         return 0
 
     if args.subcommand == "capability-profile":
-        import json
-
         from .capability_profile import CapabilityProfileError, capability_summary, load_profile
 
         try:
@@ -204,8 +192,6 @@ def main() -> int:
         return 0
 
     if args.subcommand == "golden-slice":
-        import json
-
         from .core.golden_slice import run_golden_slice_request
 
         try:
@@ -218,8 +204,6 @@ def main() -> int:
         return 0
 
     if args.subcommand == "change-fabric":
-        import json
-
         from .fabric import ChangeContract, FunctionalRequirement, ReviewConstraint, ChangeFabricEngine
 
         contract = ChangeContract(
@@ -284,6 +268,7 @@ def main() -> int:
         repl.start()
         return 0
 
+    from .models import ScanSummary
     summary = ScanSummary(
         target_root=str(target_path),
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -291,6 +276,7 @@ def main() -> int:
 
     # 1. AST Scanner
     if not args.no_ast:
+        from .scanners.ast_scanner import AstDeadCodeScanner
         ast_scanner = AstDeadCodeScanner()
         if target_path.is_file() and target_path.suffix == ".py":
             summary.files_scanned += 1
@@ -306,28 +292,31 @@ def main() -> int:
 
     # 2. Orphan Scanner
     if not args.no_orphans and target_path.is_dir():
+        from .scanners.orphan_scanner import OrphanFileScanner
         orphan_scanner = OrphanFileScanner(target_path)
         for issue in orphan_scanner.scan_orphans():
             summary.add_issue(issue)
 
     # 3. Dependency Scanner
     if not args.no_deps and target_path.is_dir():
+        from .scanners.dep_scanner import DependencyScanner
         dep_scanner = DependencyScanner(target_path)
         for issue in dep_scanner.scan_dependencies():
             summary.add_issue(issue)
 
     shard_id = None
     if args.save_shard:
+        from .shard_recorder import ShardRecorder
         recorder = ShardRecorder()
         shard_id = recorder.record_scan_receipt(summary)
 
     if args.json:
-        import json
         out = summary.to_dict()
         if shard_id:
             out["shard_id"] = shard_id
         print(json.dumps(out, indent=2))
     else:
+        from .reporters.console import ConsoleReporter
         reporter = ConsoleReporter()
         reporter.print_summary(summary, shard_id)
 

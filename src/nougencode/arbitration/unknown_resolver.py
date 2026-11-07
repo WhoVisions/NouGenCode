@@ -136,39 +136,35 @@ class EpistemicRouter:
         """Apply epistemic resolution hierarchy to an unknown variable."""
         # 1. Authoritative lookup in repository context / files
         if EpistemicMethod.LOOKUP in unknown.preferred_resolvers:
-            res = self._try_lookup(unknown, context)
-            if res:
-                return res
+            direct_val = context.get(unknown.key)
+            if direct_val is not None:
+                return Resolution(
+                    key=unknown.key,
+                    resolver=EpistemicMethod.LOOKUP,
+                    value=direct_val,
+                    state=UnknownState.RESOLVED,
+                    exact=True,
+                    confidence=1.0,
+                    evidence=(f"Context exact lookup: {unknown.key}",),
+                )
 
-        # 2. Exact mathematical derivation
-        if EpistemicMethod.DERIVE in unknown.preferred_resolvers:
-            res = self._try_derive(unknown, context)
-            if res:
-                return res
-
-        # 3. Constraint solver / dependency graph
-        if EpistemicMethod.CONSTRAINT_SOLVE in unknown.preferred_resolvers:
-            res = self._try_constraint_solve(unknown, context)
-            if res:
-                return res
-
-        # 4. Live observation / probe
-        if EpistemicMethod.OBSERVE in unknown.preferred_resolvers:
-            res = self._try_observe(unknown, context)
-            if res:
-                return res
-
-        # 5. Search in memory shards / local index
-        if EpistemicMethod.SEARCH in unknown.preferred_resolvers:
-            res = self._try_search(unknown, context)
-            if res:
-                return res
-
-        # 6. Bounded probabilistic judgment (Jev / OllamaProb)
-        if EpistemicMethod.BOUNDED_JUDGMENT in unknown.preferred_resolvers and unknown.answer_space:
-            res = self._try_bounded_judgment(unknown, context)
-            if res:
-                return res
+        # 2-6. Handler-backed epistemic operators in strict hierarchy order
+        if self.handlers:
+            for method in (
+                EpistemicMethod.DERIVE,
+                EpistemicMethod.CONSTRAINT_SOLVE,
+                EpistemicMethod.OBSERVE,
+                EpistemicMethod.SEARCH,
+                EpistemicMethod.BOUNDED_JUDGMENT,
+            ):
+                if (
+                    method in self.handlers
+                    and method in unknown.preferred_resolvers
+                    and (method is not EpistemicMethod.BOUNDED_JUDGMENT or unknown.answer_space)
+                ):
+                    res = self.handlers[method](unknown, context)
+                    if res:
+                        return res
 
         # 7. Value of Information (VOI) calculation for Ask Human
         # If unknown is critical and required, and cannot be derived, ask human.
@@ -195,47 +191,6 @@ class EpistemicRouter:
             evidence=("Insufficient epistemic evidence to resolve unknown",),
         )
 
-    def _try_lookup(self, unknown: Unknown, context: Dict[str, Any]) -> Optional[Resolution]:
-        # Context lookup (e.g. repomap, package.json, git configs)
-        direct_val = context.get(unknown.key)
-        if direct_val is not None:
-            return Resolution(
-                key=unknown.key,
-                resolver=EpistemicMethod.LOOKUP,
-                value=direct_val,
-                state=UnknownState.RESOLVED,
-                exact=True,
-                confidence=1.0,
-                evidence=(f"Context exact lookup: {unknown.key}",),
-            )
-        return None
-
-    def _try_derive(self, unknown: Unknown, context: Dict[str, Any]) -> Optional[Resolution]:
-        # Mathematical formulas registered in handlers or context
-        if EpistemicMethod.DERIVE in self.handlers:
-            return self.handlers[EpistemicMethod.DERIVE](unknown, context)
-        return None
-
-    def _try_constraint_solve(self, unknown: Unknown, context: Dict[str, Any]) -> Optional[Resolution]:
-        if EpistemicMethod.CONSTRAINT_SOLVE in self.handlers:
-            return self.handlers[EpistemicMethod.CONSTRAINT_SOLVE](unknown, context)
-        return None
-
-    def _try_observe(self, unknown: Unknown, context: Dict[str, Any]) -> Optional[Resolution]:
-        if EpistemicMethod.OBSERVE in self.handlers:
-            return self.handlers[EpistemicMethod.OBSERVE](unknown, context)
-        return None
-
-    def _try_search(self, unknown: Unknown, context: Dict[str, Any]) -> Optional[Resolution]:
-        if EpistemicMethod.SEARCH in self.handlers:
-            return self.handlers[EpistemicMethod.SEARCH](unknown, context)
-        return None
-
-    def _try_bounded_judgment(self, unknown: Unknown, context: Dict[str, Any]) -> Optional[Resolution]:
-        if EpistemicMethod.BOUNDED_JUDGMENT in self.handlers:
-            return self.handlers[EpistemicMethod.BOUNDED_JUDGMENT](unknown, context)
-        return None
-
 
 class ConstraintClosureGate:
     """
@@ -253,24 +208,21 @@ class ConstraintClosureGate:
         context: Dict[str, Any]
     ) -> ClosureResult:
         """Resolve all unknowns and enforce closure."""
-        normalized_unknowns: List[Unknown] = []
-        for item in unknowns:
-            if isinstance(item, Unknown):
-                normalized_unknowns.append(item)
-            elif isinstance(item, str):
-                normalized_unknowns.append(
-                    Unknown(
-                        key=item,
-                        question=f"Resolve unknown requirement: {item}",
-                        required=True,
-                        criticality=0.8,
-                    )
-                )
-
         resolutions: Dict[str, Resolution] = {}
         blockers: List[Unknown] = []
 
-        for u in normalized_unknowns:
+        for item in unknowns:
+            if isinstance(item, str):
+                u = Unknown(
+                    key=item,
+                    question=f"Resolve unknown requirement: {item}",
+                    required=True,
+                    criticality=0.8,
+                )
+            elif isinstance(item, Unknown):
+                u = item
+            else:
+                continue
             resolution = self.router.resolve(u, context)
             resolutions[u.key] = resolution
             if u.required and resolution.state == UnknownState.UNRESOLVED:

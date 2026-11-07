@@ -79,13 +79,19 @@ def _validate_observation(observation: Any, field: str) -> None:
             raise CapabilityProfileError(f"{field}.value must be null when status is UNKNOWN")
 
 
-def _observations(value: Any, field: str, *, require_one: bool = False) -> List[Mapping[str, Any]]:
+def _observations(
+    value: Any, field: str, evidence_ids: set[str], *, require_one: bool = False
+) -> List[Mapping[str, Any]]:
     if not isinstance(value, list):
         raise CapabilityProfileError(f"{field} must be an array")
     if require_one and not value:
         raise CapabilityProfileError(f"{field} must contain at least one provenance-bearing observation")
     for index, observation in enumerate(value):
         _validate_observation(observation, f"{field}[{index}]")
+        obs_id = observation["observation_id"]
+        if obs_id in evidence_ids:
+            raise CapabilityProfileError(f"duplicate observation_id: {obs_id}")
+        evidence_ids.add(obs_id)
     return value
 
 
@@ -107,13 +113,8 @@ def validate_profile(profile: Any) -> Mapping[str, Any]:
     _require_text(worker.get("worker_id"), "profile.worker.worker_id")
     if "display_name" in worker and not isinstance(worker["display_name"], str):
         raise CapabilityProfileError("profile.worker.display_name must be a string")
-    evidence_ids = set()
-    worker_observations = _observations(worker.get("observations"), "profile.worker.observations")
-    for observation in worker_observations:
-        observation_id = observation["observation_id"]
-        if observation_id in evidence_ids:
-            raise CapabilityProfileError(f"duplicate observation_id: {observation_id}")
-        evidence_ids.add(observation_id)
+    evidence_ids: set[str] = set()
+    _observations(worker.get("observations"), "profile.worker.observations", evidence_ids)
 
     devices = root.get("devices")
     if not isinstance(devices, list):
@@ -123,12 +124,7 @@ def validate_profile(profile: Any) -> Mapping[str, Any]:
         _reject_extra(device, {"device_id", "kind", "observations"}, f"profile.devices[{index}]")
         _require_text(device.get("device_id"), f"profile.devices[{index}].device_id")
         _require_text(device.get("kind"), f"profile.devices[{index}].kind")
-        device_observations = _observations(device.get("observations"), f"profile.devices[{index}].observations")
-        for observation in device_observations:
-            observation_id = observation["observation_id"]
-            if observation_id in evidence_ids:
-                raise CapabilityProfileError(f"duplicate observation_id: {observation_id}")
-            evidence_ids.add(observation_id)
+        _observations(device.get("observations"), f"profile.devices[{index}].observations", evidence_ids)
 
     capabilities = root.get("capabilities")
     if not isinstance(capabilities, list):
@@ -147,7 +143,7 @@ def validate_profile(profile: Any) -> Mapping[str, Any]:
         if capability.get("result") not in {"PASS", "FAIL", "UNKNOWN"}:
             raise CapabilityProfileError(f"{field}.result must be PASS, FAIL, or UNKNOWN")
         _require_mapping(capability.get("parameters"), f"{field}.parameters")
-        observations = _observations(capability.get("observations"), f"{field}.observations", require_one=True)
+        observations = _observations(capability.get("observations"), f"{field}.observations", evidence_ids, require_one=True)
         outcomes = [observation for observation in observations if observation.get("metric") == "outcome"]
         if not outcomes:
             raise CapabilityProfileError(f"{field} needs an outcome observation with provenance")
@@ -158,11 +154,6 @@ def validate_profile(profile: Any) -> Mapping[str, Any]:
             raise CapabilityProfileError(f"{field}.result must match its observed outcome")
         if outcome.get("status") == "UNKNOWN" and capability["result"] != "UNKNOWN":
             raise CapabilityProfileError(f"{field}.result must be UNKNOWN when its outcome is UNKNOWN")
-        for observation in observations:
-            observation_id = observation["observation_id"]
-            if observation_id in evidence_ids:
-                raise CapabilityProfileError(f"duplicate observation_id: {observation_id}")
-            evidence_ids.add(observation_id)
 
         artifacts = capability.get("artifacts", [])
         if not isinstance(artifacts, list):
@@ -215,8 +206,12 @@ def observation_state(observation: Mapping[str, Any], as_of: datetime) -> str:
     return "FRESH" if now <= expires_at else "UNKNOWN"
 
 
-def _resolved_observation(observation: Mapping[str, Any], as_of: datetime) -> Dict[str, Any]:
+def _resolved_observation(
+    observation: Mapping[str, Any], as_of: datetime, fresh_ids: Optional[set[str]] = None
+) -> Dict[str, Any]:
     fresh = observation_state(observation, as_of) == "FRESH"
+    if fresh and fresh_ids is not None:
+        fresh_ids.add(observation["observation_id"])
     resolved = {
         "observation_id": observation["observation_id"],
         "metric": observation["metric"],
@@ -240,48 +235,38 @@ def capability_summary(profile: Mapping[str, Any], as_of: Optional[datetime] = N
     if now.tzinfo is None:
         raise ValueError("as_of must include a timezone")
     now = now.astimezone(timezone.utc)
+    fresh_ids: set[str] = set()
+    worker_observations = [_resolved_observation(item, now, fresh_ids) for item in validated["worker"]["observations"]]
+    devices = [{
+        "device_id": device["device_id"],
+        "kind": device["kind"],
+        "observations": [_resolved_observation(item, now, fresh_ids) for item in device["observations"]],
+    } for device in validated["devices"]]
     summary = []
-    recommendations = []
     for capability in validated["capabilities"]:
-        outcome = next(item for item in capability["observations"] if item["metric"] == "outcome")
-        fresh = observation_state(outcome, now) == "FRESH"
-        resolved = capability["result"] if fresh else "UNKNOWN"
-        if outcome["status"] == "UNKNOWN":
-            resolved = "UNKNOWN"
+        observations = [_resolved_observation(item, now, fresh_ids) for item in capability["observations"]]
+        fresh = any(item["metric"] == "outcome" and item["status"] == "OBSERVED" for item in observations)
         summary.append({
             "workload_id": capability["workload_id"],
             "kind": capability["kind"],
             "declared_result": capability["result"],
-            "effective_result": resolved,
+            "effective_result": capability["result"] if fresh else "UNKNOWN",
             "freshness": "FRESH" if fresh else "UNKNOWN",
-            "observations": [_resolved_observation(item, now) for item in capability["observations"]],
+            "observations": observations,
         })
-    all_observations = {
-        observation["observation_id"]: observation
-        for collection in [validated["worker"]["observations"]]
-        + [device["observations"] for device in validated["devices"]]
-        + [capability["observations"] for capability in validated["capabilities"]]
-        for observation in collection
-    }
-    for recommendation in validated.get("recommendations", []):
-        fresh = all(observation_state(all_observations[item], now) == "FRESH" for item in recommendation["evidence_ids"])
-        recommendations.append({
-            "workload_id": recommendation["workload_id"],
-            "declared_decision": recommendation["decision"],
-            "effective_decision": recommendation["decision"] if fresh else "UNKNOWN",
-            "evidence_ids": recommendation["evidence_ids"],
-        })
+    recommendations = [{
+        "workload_id": rec["workload_id"],
+        "declared_decision": rec["decision"],
+        "effective_decision": rec["decision"] if all(eid in fresh_ids for eid in rec["evidence_ids"]) else "UNKNOWN",
+        "evidence_ids": rec["evidence_ids"],
+    } for rec in validated.get("recommendations", [])]
     return {
         "schema_version": SCHEMA_VERSION,
         "profile_id": validated["profile_id"],
         "worker_id": validated["worker"]["worker_id"],
         "as_of": now.isoformat(),
-        "worker_observations": [_resolved_observation(item, now) for item in validated["worker"]["observations"]],
-        "devices": [{
-            "device_id": device["device_id"],
-            "kind": device["kind"],
-            "observations": [_resolved_observation(item, now) for item in device["observations"]],
-        } for device in validated["devices"]],
+        "worker_observations": worker_observations,
+        "devices": devices,
         "capabilities": summary,
         "recommendations": recommendations,
     }

@@ -7,7 +7,7 @@ these pure functions. Missing or stale evidence stays UNKNOWN.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 import hashlib
@@ -144,12 +144,12 @@ def collect_adapter_evidence(
     )
 
 
-def _canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+def _canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def _hash(value: Any) -> str:
-    return hashlib.sha256(_canonical(value)).hexdigest()
+    return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
 
 
 def _score_hypotheses(evidence: Sequence[Evidence]) -> tuple[dict[str, float], int]:
@@ -160,34 +160,29 @@ def _score_hypotheses(evidence: Sequence[Evidence]) -> tuple[dict[str, float], i
     support: dict[tuple[str, str], float] = {}
     penalty: dict[tuple[str, str], float] = {}
     attack_groups: set[str] = set()
-    for item in sorted(evidence, key=lambda row: (row.source, row.evidence_id)):
-        reliability = min(1.0, max(0.0, item.reliability))
-        freshness = min(1.0, max(0.0, item.freshness))
+    for item in evidence:
+        weight = min(1.0, max(0.0, item.reliability)) * min(1.0, max(0.0, item.freshness))
+        pen = max(0.0, item.contradiction_penalty)
         group = item.independent_group or f"_solo:{item.source}:{item.evidence_id}"
-        for hypothesis, specificity in sorted(item.specificity.items()):
-            contribution = reliability * freshness * min(1.0, max(0.0, specificity))
+        for hypothesis, specificity in item.specificity.items():
+            contribution = weight * min(1.0, max(0.0, specificity))
             key = (hypothesis, group)
             support[key] = max(support.get(key, 0.0), contribution)
-            penalty[key] = max(penalty.get(key, 0.0), max(0.0, item.contradiction_penalty))
+            penalty[key] = max(penalty.get(key, 0.0), pen)
             if hypothesis == "hostile_action" and contribution > 0 and item.independent_group:
                 attack_groups.add(item.independent_group)
     scores: dict[str, float] = {}
-    for (hypothesis, _group), value in sorted(support.items()):
-        scores[hypothesis] = scores.get(hypothesis, 0.0) + value - penalty[(hypothesis, _group)]
-    return {key: round(max(0.0, value), 12) for key, value in sorted(scores.items())}, len(attack_groups)
+    for (hypothesis, group), value in sorted(support.items()):
+        scores[hypothesis] = scores.get(hypothesis, 0.0) + value - penalty[(hypothesis, group)]
+    return {key: round(max(0.0, value), 12) for key, value in scores.items()}, len(attack_groups)
 
 
-def _is_fresh(observed_at: str, ttl_seconds: int, evaluated_at: str) -> bool:
-    """Check snapshot age using caller-supplied time; invalid clocks fail closed."""
+def _parse_utc(value: str) -> Optional[datetime]:
     try:
-        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
-        evaluated = datetime.fromisoformat(evaluated_at.replace("Z", "+00:00"))
-        if observed.tzinfo is None or evaluated.tzinfo is None or ttl_seconds < 0:
-            return False
-        age = (evaluated.astimezone(timezone.utc) - observed.astimezone(timezone.utc)).total_seconds()
-        return 0 <= age <= ttl_seconds
-    except (TypeError, ValueError, OverflowError):
-        return False
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt.astimezone(timezone.utc) if dt.tzinfo is not None else None
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
 
 
 def assess_resilience(
@@ -200,47 +195,43 @@ def assess_resilience(
     """Resolve route state and a bounded mutation gate from one normalized snapshot."""
     routes: list[RouteAssessment] = []
     all_evidence: list[Evidence] = []
-    expected_observations = sorted((row for row in observations if row.expected), key=lambda r: r.route_id)
+    domain_counts: dict[str, int] = {}
+    total = serving = failed = 0
+    evaluated = _parse_utc(evaluated_at)
     for row in sorted(observations, key=lambda r: r.route_id):
         all_evidence.extend(row.evidence)
-        fresh = _is_fresh(row.observed_at, row.ttl_seconds, evaluated_at)
+        observed = _parse_utc(row.observed_at)
+        fresh = bool(evaluated and observed and 0 <= (evaluated - observed).total_seconds() <= row.ttl_seconds)
+        deps = tuple(sorted(set(row.dependencies)))
         if not row.expected:
             state = RouteState.NOT_EXPECTED
-        elif not fresh:
-            state = RouteState.UNKNOWN
-        elif row.health_ok is False or row.mcp_ok is False:
-            state = RouteState.RED
-        elif row.health_ok and row.mcp_ok:
-            state = RouteState.GREEN
         else:
-            state = RouteState.UNKNOWN
-        routes.append(RouteAssessment(
-            route_id=row.route_id,
-            state=state,
-            dependencies=tuple(sorted(set(row.dependencies))),
-            evidence_ids=tuple(sorted(item.evidence_id for item in row.evidence)),
-        ))
+            total += 1
+            if not fresh:
+                state = RouteState.UNKNOWN
+            elif row.health_ok is False or row.mcp_ok is False:
+                state = RouteState.RED
+                failed += 1
+                for dep in deps:
+                    domain_counts[dep] = domain_counts.get(dep, 0) + 1
+            elif row.health_ok and row.mcp_ok:
+                state = RouteState.GREEN
+                serving += 1
+            else:
+                state = RouteState.UNKNOWN
+        routes.append(RouteAssessment(row.route_id, state, deps, tuple(sorted(item.evidence_id for item in row.evidence))))
 
-    expected = [row for row in routes if row.state != RouteState.NOT_EXPECTED]
-    serving = sum(row.state == RouteState.GREEN for row in expected)
-    failed = sum(row.state == RouteState.RED for row in expected)
     if serving:
         decision = ResilienceDecision.DEGRADED if failed else ResilienceDecision.SERVING
-    elif expected and failed == len(expected):
+    elif total and failed == total:
         decision = ResilienceDecision.UNAVAILABLE
     else:
         decision = ResilienceDecision.UNKNOWN
-    total = len(expected)
-    red_dependencies = [dep for row in expected if row.state == RouteState.RED for dep in row.dependencies]
-    domain_counts: dict[str, int] = {}
-    for dependency in red_dependencies:
-        domain_counts[dependency] = domain_counts.get(dependency, 0) + 1
     domains = tuple(sorted(dep for dep, count in domain_counts.items() if count > 1))
     scores, attack_groups = _score_hypotheses(all_evidence)
-    attack_threshold = max(policy.attack_min_score, 0.0)
     attack_classified = (
         attack_groups >= max(policy.attack_min_independent_groups, 2)
-        and scores.get("hostile_action", 0.0) >= attack_threshold
+        and scores.get("hostile_action", 0.0) >= max(policy.attack_min_score, 0.0)
     )
 
     if mutation is None:
@@ -254,18 +245,13 @@ def assess_resilience(
     else:
         mutation_allowed, mutation_reason = True, "authorized_reversible_plan"
     return ResilienceAssessment(
-        decision=decision,
-        routes=tuple(routes),
-        expected_routes=total,
-        serving_routes=serving,
-        failed_routes=failed,
+        decision=decision, routes=tuple(routes), expected_routes=total,
+        serving_routes=serving, failed_routes=failed,
         blast_radius=round(failed / total, 12) if total else None,
         serving_ratio=round(serving / total, 12) if total else None,
-        correlated_failure_domains=domains,
-        hypothesis_scores=scores,
+        correlated_failure_domains=domains, hypothesis_scores=scores,
         attack_classified=attack_classified,
-        mutation_allowed=mutation_allowed,
-        mutation_reason=mutation_reason,
+        mutation_allowed=mutation_allowed, mutation_reason=mutation_reason,
     )
 
 
@@ -283,31 +269,32 @@ def make_proof_receipt(
 ) -> dict[str, Any]:
     """Return a content-addressed receipt with a byte-stable canonical decision."""
     normalized_observations = []
+    evidence_hashes = []
     for item in sorted(observations, key=lambda row: row.route_id):
-        row = asdict(item)
-        row["evidence"] = sorted(row["evidence"], key=lambda evidence: (evidence["source"], evidence["evidence_id"]))
-        row["dependencies"] = sorted(set(row["dependencies"]))
-        normalized_observations.append(row)
-    normalized = {
-        "observations": normalized_observations,
-        "policy": asdict(policy),
-        "capability_graph": capability_graph,
-    }
-    decision = asdict(assessment)
+        evs = sorted(({**e.__dict__, "specificity": dict(e.specificity)} for e in item.evidence),
+                     key=lambda ev: (ev["source"], ev["evidence_id"]))
+        normalized_observations.append({**item.__dict__, "dependencies": sorted(set(item.dependencies)), "evidence": evs})
+        evidence_hashes.extend(_hash(ev) for ev in evs)
+    policy_dict = dict(policy.__dict__)
+    normalized = {"observations": normalized_observations, "policy": policy_dict, "capability_graph": capability_graph}
     deterministic = {
         "protocol_version": PROTOCOL_VERSION,
         "schema_version": SCHEMA_VERSION,
         "normalized_input_hash": _hash(normalized),
         "capability_graph_hash": _hash(capability_graph),
-        "evidence_hashes": sorted(_hash(asdict(item)) for row in observations for item in row.evidence),
-        "policy_hash": _hash(asdict(policy)),
-        "decision": decision,
-        "planned_mutations": [asdict(item) for item in planned_mutations],
+        "evidence_hashes": sorted(evidence_hashes),
+        "policy_hash": _hash(policy_dict),
+        "decision": {
+            **assessment.__dict__,
+            "routes": tuple(dict(r.__dict__) for r in assessment.routes),
+            "hypothesis_scores": dict(assessment.hypothesis_scores),
+        },
+        "planned_mutations": [dict(item.__dict__) for item in planned_mutations],
         "executed_mutations": list(executed_mutations),
         "validation_results": list(validation_results),
         "previous_receipt_hash": previous_receipt_hash,
     }
-    canonical_decision = _canonical(deterministic).decode("utf-8")
+    canonical_decision = _canonical(deterministic)
     return {
         **deterministic,
         "canonical_decision": canonical_decision,

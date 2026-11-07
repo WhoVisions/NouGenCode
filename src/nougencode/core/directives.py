@@ -32,10 +32,13 @@ from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
 def _canonical_json(value: Any) -> str:
     """Serialize JSON-compatible values with recursive stable key ordering."""
     return json.dumps(
-        _json_compatible(value),
+        _normalize_json(value),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -43,37 +46,36 @@ def _canonical_json(value: Any) -> str:
     )
 
 
-def _string_keyed_mapping(value: Mapping[Any, Any]) -> Dict[str, Any]:
+def _normalize_json(value: Any, *, freeze: bool = False) -> Any:
     """Normalize object keys without silently collapsing distinct source keys."""
-    result: Dict[str, Any] = {}
-    for key, nested in value.items():
-        normalized_key = str(key)
-        if normalized_key in result:
-            raise ValueError("duplicate object keys after JSON key normalization")
-        result[normalized_key] = nested
-    return result
-
-
-def _json_compatible(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {
-            key: _json_compatible(nested)
-            for key, nested in _string_keyed_mapping(value).items()
-        }
+        result: Dict[str, Any] = {}
+        for key, nested in value.items():
+            normalized_key = str(key)
+            if normalized_key in result:
+                raise ValueError("duplicate object keys after JSON key normalization")
+            result[normalized_key] = _normalize_json(nested, freeze=freeze)
+        return MappingProxyType(result) if freeze else result
     if isinstance(value, (list, tuple)):
-        return [_json_compatible(nested) for nested in value]
+        items = (_normalize_json(nested, freeze=freeze) for nested in value)
+        return tuple(items) if freeze else list(items)
     return value
 
 
-def _freeze_json(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return MappingProxyType({
-            key: _freeze_json(nested)
-            for key, nested in _string_keyed_mapping(value).items()
-        })
-    if isinstance(value, (list, tuple)):
-        return tuple(_freeze_json(nested) for nested in value)
-    return value
+def _evidence_hash(
+    plan_hash: str,
+    directive_type: DirectiveType,
+    success: bool,
+    evidence: Mapping[str, Any],
+) -> str:
+    """Bind the receipt hash to its plan, verdict, type, and evidence."""
+    payload = {
+        "plan_hash": plan_hash,
+        "directive_type": directive_type.value,
+        "success": success,
+        "runtime_evidence": evidence,
+    }
+    return sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
 
 class DirectiveType(str, Enum):
@@ -132,7 +134,7 @@ class DirectiveReceipt:
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "runtime_evidence", _freeze_json(self.runtime_evidence))
+        object.__setattr__(self, "runtime_evidence", _normalize_json(self.runtime_evidence, freeze=True))
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a detached JSON-compatible receipt for storage or transport."""
@@ -142,9 +144,7 @@ class DirectiveReceipt:
             "plan_hash": self.plan_hash,
             "directive_type": self.directive_type.value,
             "success": self.success,
-            # Round-trip through the strict canonical serializer so even a
-            # manually constructed receipt cannot export NaN or opaque values.
-            "runtime_evidence": json.loads(_canonical_json(self.runtime_evidence)),
+            "runtime_evidence": _normalize_json(self.runtime_evidence),
             "output_hash": self.output_hash,
             "timestamp": self.timestamp,
         }
@@ -155,18 +155,11 @@ class DirectiveReceipt:
             return False
         if not isinstance(self.runtime_evidence, Mapping) or not isinstance(self.timestamp, str):
             return False
-        if not isinstance(self.plan_hash, str) or re.fullmatch(r"[0-9a-f]{64}", self.plan_hash) is None:
-            return False
-        if not isinstance(self.output_hash, str) or re.fullmatch(r"[0-9a-f]{64}", self.output_hash) is None:
+        if not (isinstance(self.plan_hash, str) and _SHA256_RE.fullmatch(self.plan_hash)
+                and isinstance(self.output_hash, str) and _SHA256_RE.fullmatch(self.output_hash)):
             return False
         try:
-            payload = {
-                "plan_hash": self.plan_hash,
-                "directive_type": self.directive_type.value,
-                "success": self.success,
-                "runtime_evidence": self.runtime_evidence,
-            }
-            expected = sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+            expected = _evidence_hash(self.plan_hash, self.directive_type, self.success, self.runtime_evidence)
         except (RecursionError, TypeError, ValueError):
             return False
         return hmac.compare_digest(expected, self.output_hash)
@@ -174,32 +167,19 @@ class DirectiveReceipt:
     @classmethod
     def verify_exported_dict(cls, value: Any) -> bool:
         """Verify an exported receipt after it crosses a JSON boundary."""
-        if not isinstance(value, Mapping):
-            return False
-        expected_keys = {
-            "plan_hash",
-            "directive_type",
-            "success",
-            "runtime_evidence",
-            "output_hash",
-            "timestamp",
-        }
-        if set(value) != expected_keys:
+        if not isinstance(value, Mapping) or set(value) != {
+            "plan_hash", "directive_type", "success", "runtime_evidence", "output_hash", "timestamp",
+        }:
             return False
         try:
-            if not isinstance(value["runtime_evidence"], Mapping):
-                return False
-            if type(value["success"]) is not bool or not isinstance(value["timestamp"], str):
-                return False
-            receipt = cls(
+            return cls(
                 plan_hash=value["plan_hash"],
                 directive_type=DirectiveType(value["directive_type"]),
                 success=value["success"],
                 runtime_evidence=value["runtime_evidence"],
                 output_hash=value["output_hash"],
                 timestamp=value["timestamp"],
-            )
-            return receipt.has_valid_output_hash()
+            ).has_valid_output_hash()
         except (KeyError, RecursionError, TypeError, ValueError):
             return False
 
@@ -397,9 +377,11 @@ class DirectiveOrchestrator:
         """
         plan_hash = plan.compute_plan_hash()
         handler = self._handlers.get(plan.directive_type)
+        verified = False
+        out_hash: Optional[str] = None
 
         if handler is None:
-            evidence = {
+            evidence: Dict[str, Any] = {
                 "dispatched": False,
                 "execution_attempted": False,
                 "subsystem": plan.target_subsystem,
@@ -407,56 +389,42 @@ class DirectiveOrchestrator:
                 "completion_state": "unconfigured",
                 "remaining_work": "Register an executor; no work was performed.",
             }
-            out_hash = self._evidence_hash(plan_hash, plan.directive_type, False, evidence)
-            return DirectiveReceipt(
-                plan_hash=plan_hash,
-                directive_type=plan.directive_type,
-                success=False,
-                runtime_evidence=evidence,
-                output_hash=out_hash,
-            )
+        else:
+            try:
+                evidence, diagnostics_redacted = self._sanitize_evidence(dict(handler(plan)))
+                # The registered handler did run, but this fact alone does not
+                # establish that the requested work was dispatched or completed.
+                evidence["execution_attempted"] = True
+                if diagnostics_redacted:
+                    evidence["diagnostic_fields_redacted"] = True
+                verified = self._has_completion_evidence(evidence) and not diagnostics_redacted
+                evidence["completion_state"] = "verified" if verified else "unverified"
+                if not verified:
+                    evidence.setdefault(
+                        "remaining_work",
+                        "Verify the result and provide verification_method, verification_passed, and evidence_refs.",
+                    )
+                out_hash = _evidence_hash(plan_hash, plan.directive_type, verified, evidence)
+            except Exception as e:
+                # Exception text may contain request data, URLs, or credentials. Keep
+                # the receipt useful without copying raw diagnostics into the relay.
+                verified = False
+                evidence = {
+                    "execution_attempted": True,
+                    "error_type": type(e).__name__,
+                    "failed_subsystem": plan.target_subsystem,
+                    "status": "failed",
+                    "completion_state": "failed",
+                    "remaining_work": "Inspect protected diagnostics and retry only after the cause is understood.",
+                }
 
-        try:
-            evidence, diagnostics_redacted = self._sanitize_evidence(dict(handler(plan)))
-            # The registered handler did run, but this fact alone does not
-            # establish that the requested work was dispatched or completed.
-            evidence["execution_attempted"] = True
-            if diagnostics_redacted:
-                evidence["diagnostic_fields_redacted"] = True
-            verified = self._has_completion_evidence(evidence) and not diagnostics_redacted
-            evidence["completion_state"] = "verified" if verified else "unverified"
-            if not verified:
-                evidence.setdefault(
-                    "remaining_work",
-                    "Verify the result and provide verification_method, verification_passed, and evidence_refs.",
-                )
-            out_hash = self._evidence_hash(plan_hash, plan.directive_type, verified, evidence)
-            return DirectiveReceipt(
-                plan_hash=plan_hash,
-                directive_type=plan.directive_type,
-                success=verified,
-                runtime_evidence=evidence,
-                output_hash=out_hash,
-            )
-        except Exception as e:
-            # Exception text may contain request data, URLs, or credentials. Keep
-            # the receipt useful without copying raw diagnostics into the relay.
-            err_evidence = {
-                "execution_attempted": True,
-                "error_type": type(e).__name__,
-                "failed_subsystem": plan.target_subsystem,
-                "status": "failed",
-                "completion_state": "failed",
-                "remaining_work": "Inspect protected diagnostics and retry only after the cause is understood.",
-            }
-            out_hash = self._evidence_hash(plan_hash, plan.directive_type, False, err_evidence)
-            return DirectiveReceipt(
-                plan_hash=plan_hash,
-                directive_type=plan.directive_type,
-                success=False,
-                runtime_evidence=err_evidence,
-                output_hash=out_hash,
-            )
+        return DirectiveReceipt(
+            plan_hash=plan_hash,
+            directive_type=plan.directive_type,
+            success=verified,
+            runtime_evidence=evidence,
+            output_hash=out_hash or _evidence_hash(plan_hash, plan.directive_type, verified, evidence),
+        )
 
     @staticmethod
     def _has_completion_evidence(evidence: Mapping[str, Any]) -> bool:
@@ -478,22 +446,6 @@ class DirectiveOrchestrator:
             and bool(refs)
             and all(isinstance(ref, str) and bool(ref.strip()) for ref in refs)
         )
-
-    @staticmethod
-    def _evidence_hash(
-        plan_hash: str,
-        directive_type: DirectiveType,
-        success: bool,
-        evidence: Mapping[str, Any],
-    ) -> str:
-        """Bind the receipt hash to its plan, verdict, type, and evidence."""
-        payload = {
-            "plan_hash": plan_hash,
-            "directive_type": directive_type.value,
-            "success": success,
-            "runtime_evidence": evidence,
-        }
-        return sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
     @classmethod
     def _sanitize_evidence(cls, value: Any) -> Tuple[Dict[str, Any], bool]:

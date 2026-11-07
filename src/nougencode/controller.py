@@ -1,14 +1,13 @@
 """Main controller for the provider-neutral NouGenCode mission lifecycle."""
 
 import asyncio
-from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .arbitration.arbiter import Claim, EvidenceArbiter, EvidenceReceipt, ProofObject
-from .arbitration.unknown_resolver import ConstraintClosureGate, EpistemicRouter, Unknown, UnknownState
+from .arbitration.unknown_resolver import ConstraintClosureGate
 from .context_gate import ContextGate
 from .core.checkpoint import (
     MissionCheckpoint,
@@ -26,7 +25,6 @@ from .core.mission import (
     RuntimeIdentity,
     TaskNode,
 )
-from .cleanup import run_cleanup_pass
 from .repo.cartographer import RepoCartographer
 from .routing.switchboard import (
     CodeProvider,
@@ -85,11 +83,10 @@ class NouGenCodeController:
     @staticmethod
     def _mission_id(identity: RuntimeIdentity, intent: Intent) -> str:
         identity_fields = {
-            key: value for key, value in asdict(identity).items()
-            if key in {
+            key: getattr(identity, key) for key in (
                 "tenant_id", "workspace_id", "machine_id", "repo_id", "session_id",
                 "branch", "relay_leg_id",
-            }
+            )
         }
         digest = hashlib.sha256(
             json.dumps({"identity": identity_fields, "goal": intent.goal}, sort_keys=True).encode("utf-8")
@@ -242,6 +239,7 @@ class NouGenCodeController:
         # before any provider work. Report-only; a failure is recorded, never fatal.
         if self.cleanup_pass:
             try:
+                from .cleanup import run_cleanup_pass
                 cleanup = run_cleanup_pass(self.repo_root, top=10)
                 receipts.append(EvidenceReceipt.from_payload(
                     "cleanup_pass",
@@ -474,39 +472,22 @@ class NouGenCodeController:
                             ))
 
                     mission.state = MissionState.REVIEWING
-                    from .critics.product import ProductJudgmentCritic
-                    from .security.invariants import ConcentricSecurityGate
+                    if result.mutations:
+                        from .security.invariants import ConcentricSecurityGate
+                        for mutation in result.mutations:
+                            code = mutation.get("content") or ""
+                            for violation in ConcentricSecurityGate.audit_code(code):
+                                claims.append(Claim(
+                                    id=f"sec_{task.id}_{violation.violation_type}",
+                                    statement=violation.message,
+                                    severity=1.0,
+                                    confidence=1.0,
+                                    evidence=[violation.violation_type, violation.matched_snippet],
+                                ))
 
-                    for mutation in result.mutations:
-                        code = mutation.get("content") or ""
-                        for violation in ConcentricSecurityGate.audit_code(code):
-                            claims.append(Claim(
-                                id=f"sec_{task.id}_{violation.violation_type}",
-                                statement=violation.message,
-                                severity=1.0,
-                                confidence=1.0,
-                                evidence=[violation.violation_type, violation.matched_snippet],
-                            ))
-
-                    critic = ProductJudgmentCritic(penalty_lambda=2.0)
-                    # Do not manufacture inferred requirements from source-code
-                    # keyword presence. A product reasoner must provide proposals
-                    # with repository/user evidence and an independent check.
-                    critic_result = critic.evaluate_inferred_requirements(
-                        explicit_requirements=(task.objective,),
-                        proposals=(),
-                        evidence=(),
-                        implementation_checks=(),
-                    )
-                    if critic_result.hallucinated_count:
-                        claims.append(Claim(
-                            id=f"lsc_{task.id}",
-                            statement=f"Product review found {critic_result.hallucinated_count} unsupported additions.",
-                            severity=0.75,
-                            confidence=0.85,
-                            evidence=["product_judgment_critic"],
-                        ))
-
+                # Do not manufacture inferred requirements from source-code
+                # keyword presence. A product reasoner must provide proposals
+                # with repository/user evidence and an independent check.
                 receipts.append(EvidenceReceipt.from_payload(
                     "independent_review",
                     "security_and_product_critics",

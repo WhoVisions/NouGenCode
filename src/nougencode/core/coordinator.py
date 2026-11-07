@@ -27,7 +27,7 @@ from enum import Enum
 from hashlib import sha256
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from nougencode.core.evidence_kernel import CoverageEnvelope, EventEnvelope, EvidenceState, Provenance
+from nougencode.core.evidence_kernel import CoverageEnvelope, EventEnvelope, EvidenceState
 
 
 class WorkflowPhase(str, Enum):

@@ -74,11 +74,6 @@ class FileFacts:
     funcs: List[FuncSig] = field(default_factory=list)
 
 
-def _shingles(node: ast.AST) -> Set[str]:
-    kinds = [type(n).__name__ for n in ast.walk(node)]
-    return {"/".join(kinds[i:i + 3]) for i in range(max(len(kinds) - 2, 1))}
-
-
 def _module_name(rel: str) -> str:
     parts = Path(rel).with_suffix("").parts
     if parts and parts[0] == "src":
@@ -157,13 +152,15 @@ def _visit(f: FileFacts, tree: ast.Module) -> None:
         elif isinstance(node, ast.Call):
             f.calls.add(_dotted(node.func))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and len(node.body) >= 3:
-            idents = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)} | {
-                n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
+            sub = list(ast.walk(node))
+            kinds = [type(n).__name__ for n in sub]
             f.funcs.append(FuncSig(
-                file=f.rel, name=node.name, shingles=_shingles(node), idents=idents,
+                file=f.rel, name=node.name,
+                shingles={"/".join(kinds[i:i + 3]) for i in range(max(len(kinds) - 2, 1))},
+                idents={n.id if isinstance(n, ast.Name) else n.attr for n in sub if isinstance(n, (ast.Name, ast.Attribute))},
                 arity=len(node.args.args) + len(node.args.kwonlyargs),
-                returns=any(isinstance(n, ast.Return) and n.value is not None for n in ast.walk(node)),
-                globals_used={n for g in ast.walk(node) if isinstance(g, ast.Global) for n in g.names},
+                returns=any(isinstance(n, ast.Return) and n.value is not None for n in sub),
+                globals_used={n for g in sub if isinstance(g, ast.Global) for n in g.names},
                 loc=(getattr(node, "end_lineno", node.lineno) - node.lineno + 1),
             ))
             for d in node.args.defaults:
@@ -190,7 +187,8 @@ def _doc_script_stems(root: Path, limit: int = 2000) -> Set[str]:
 
 
 def _jaccard(a: Set[str], b: Set[str]) -> float:
-    return len(a & b) / len(a | b) if a and b else 0.0
+    inter = len(a & b)
+    return inter / (len(a) + len(b) - inter) if inter else 0.0
 
 
 def _git_ages(root: Path) -> Tuple[Dict[str, float], Dict[str, int]]:
@@ -299,7 +297,8 @@ def run_cleanup_pass(root: str | Path, *, weights: Optional[Dict[str, float]] = 
     best: Dict[str, Tuple[float, str, float]] = {}
     for i, a in enumerate(funcs):
         for b in funcs[i + 1:]:
-            if a.file == b.file or abs(a.loc - b.loc) > max(a.loc, b.loc) * 0.5:
+            if (a.file == b.file or abs(a.loc - b.loc) > max(a.loc, b.loc) * 0.5
+                    or min(len(a.shingles), len(b.shingles)) < max(len(a.shingles), len(b.shingles)) * SIM_THRESHOLD_FOR_PAIRS):
                 continue
             ast_sim = _jaccard(a.shingles, b.shingles)
             if ast_sim < SIM_THRESHOLD_FOR_PAIRS:
@@ -312,10 +311,6 @@ def run_cleanup_pass(root: str | Path, *, weights: Optional[Dict[str, float]] = 
             for x, y in ((a, b), (b, a)):
                 if red > best.get(x.file, (0.0, "", 0.0))[0]:
                     best[x.file] = (red, f"{y.file}::{y.name}", ast_sim)
-    near_dupes: Dict[str, int] = {}
-    for f in facts:
-        near_dupes[f.rel] = sum(1 for fn in funcs if fn.file != f.rel and best.get(f.rel, (0, "", 0))[0] >= SIM_THRESHOLD_FOR_PAIRS
-                                and best[f.rel][1].startswith(fn.file + "::"))
 
     scores: List[FileScore] = []
     for f in facts:
@@ -352,7 +347,8 @@ def run_cleanup_pass(root: str | Path, *, weights: Optional[Dict[str, float]] = 
         red, peer, ast_sim = best.get(f.rel, (0.0, None, 0.0))
         dv = S.delete_value(cc_n, dep_n, st_n, min(1.0, 0.25 * f.defects), tbr, 1.0 - pdead, fin_n)
         mv = S.merge_value(ast_sim, cc_n, st_n, red, max(fin_n, tbr))
-        pv = S.parameterization_value(min(near_dupes.get(f.rel, 0) / 3.0, 1.0), red, 1.0 - churn_n,
+        dupes = sum(1 for fn in funcs if peer.startswith(fn.file + "::")) if red >= SIM_THRESHOLD_FOR_PAIRS and peer else 0
+        pv = S.parameterization_value(min(dupes / 3.0, 1.0), red, 1.0 - churn_n,
                                       min(sum(fn.arity for fn in f.funcs) / max(len(f.funcs), 1) / 8.0, 1.0), tbr)
         decision = S.select_action(dv=dv, mv=mv, pv=pv, rp=rp, pdead=pdead, red=red, tbr=tbr, weights=w)
 

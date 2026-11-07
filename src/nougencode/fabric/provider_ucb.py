@@ -18,9 +18,9 @@ Two entry points share one arm registry:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 import math
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -63,6 +63,9 @@ class WorkloadStats:
     quality_sum: float = 0.0
     ewma_latency_ms: Optional[float] = None
     ewma_cost_usd: Optional[float] = None
+
+
+_EMPTY_STATS = WorkloadStats()
 
 
 @dataclass(frozen=True)
@@ -139,14 +142,6 @@ class ContextualProviderUCB:
         if not self._arms:
             raise ValueError("No provider arms registered in router")
 
-        total_trials = sum(arm.total_calls for arm in self._arms.values())
-        total_trials_safe = max(1, total_trials)
-
-        best_arm: Optional[ProviderArm] = None
-        best_ucb: float = -float("inf")
-        best_slb: float = 0.0
-        best_rationale: str = ""
-
         # First pass: try untried arms if task is not critical
         if task_complexity != "critical":
             for arm in self._arms.values():
@@ -160,29 +155,26 @@ class ContextualProviderUCB:
                         rationale="Initial exploration of unvisited local arm",
                     )
 
-        # Calculate UCB and SLB for each arm
-        eligible_arms: List[Tuple[ProviderArm, float, float]] = []
+        log_t = math.log(max(1, sum(arm.total_calls for arm in self._arms.values())) + 1)
+        best_arm: Optional[ProviderArm] = None
+        best_ucb: float = -float("inf")
+        best_slb: float = 0.0
 
         for arm in self._arms.values():
             n = max(1, arm.total_calls)
             mu = arm.cumulative_reward / n if arm.total_calls > 0 else 0.5
-            
-            # Confidence interval
-            radius = self.exploration_weight * math.sqrt(math.log(total_trials_safe + 1) / n)
-            ucb = mu + radius
-            slb = mu - (self.safety_beta * math.sqrt(math.log(total_trials_safe + 1) / n))
+            unit_radius = math.sqrt(log_t / n)
+            ucb = mu + self.exploration_weight * unit_radius
+            slb = mu - self.safety_beta * unit_radius
 
-            # Safety gate
             if enforce_safety and slb < self.safety_floor and not arm.is_local:
-                # Arm failed safety lower bound
                 continue
-
-            eligible_arms.append((arm, ucb, slb))
+            if ucb > best_ucb:
+                best_arm, best_ucb, best_slb = arm, ucb, slb
 
         # If all non-local failed safety, pick best local
-        if not eligible_arms:
-            local_arms = [a for a in self._arms.values() if a.is_local]
-            chosen = local_arms[0] if local_arms else list(self._arms.values())[0]
+        if best_arm is None:
+            chosen = next((a for a in self._arms.values() if a.is_local), next(iter(self._arms.values())))
             return RouteDecision(
                 selected_provider_id=chosen.provider_id,
                 selected_model_id=chosen.model_id,
@@ -191,10 +183,6 @@ class ContextualProviderUCB:
                 is_fallback=True,
                 rationale="Fallback to trusted local provider (safety lower bound triggered)",
             )
-
-        # Sort eligible arms by UCB score
-        eligible_arms.sort(key=lambda x: x[1], reverse=True)
-        best_arm, best_ucb, best_slb = eligible_arms[0]
 
         return RouteDecision(
             selected_provider_id=best_arm.provider_id,
@@ -283,8 +271,9 @@ class ContextualProviderUCB:
             raise ValueError("No provider arms registered in router")
         if not 0.0 < workload.confidence < 1.0:
             raise ValueError("confidence must be in (0, 1)")
-        total = sum(st.n for (k, c), st in self._stats.items() if c == workload.workload_class)
+        total = sum(st.n for (_, c), st in self._stats.items() if c == workload.workload_class)
         log_t = math.log(max(1, total) + 1)
+        hoeffding_log = math.log(1.0 / (1.0 - workload.confidence)) if workload.critical else 0.0
         rejected: List[Tuple[str, str]] = []
         scored: List[Tuple[float, str, ProviderArm]] = []
 
@@ -300,23 +289,23 @@ class ContextualProviderUCB:
                 rejected.append((key, f"needs {arm.memory_mb:.0f}MB, {arm.host} has {host_free_mb[arm.host]:.0f}MB free"))
                 continue
 
-            st = self._stats.get((key, workload.workload_class)) or WorkloadStats()
+            st = self._stats.get((key, workload.workload_class)) or _EMPTY_STATS
             n = st.n
             mu = st.quality_sum / n if n else 0.5
-            radius = math.sqrt(log_t / max(1, n))
-            q_ucb = mu + self.exploration_weight * radius
-            # Critical gate uses a Hoeffding lower bound (a real confidence bound for a
-            # mean in [0,1]), not the exploration radius: with that radius, 25 straight
-            # 0.95 runs still bound at 0.23, so critical work could never be placed.
-            q_slb = mu - math.sqrt(math.log(1.0 / (1.0 - workload.confidence)) / (2 * n)) if n else 0.0
+            q_ucb = mu + self.exploration_weight * math.sqrt(log_t / max(1, n))
 
             latency = st.ewma_latency_ms if st.ewma_latency_ms is not None else (arm.average_latency_ms if arm.total_calls else None)
             if workload.max_latency_ms is not None and latency is not None and latency > workload.max_latency_ms:
                 rejected.append((key, f"latency {latency:.0f}ms > max {workload.max_latency_ms:.0f}ms"))
                 continue
-            if workload.critical and q_slb < workload.min_quality:
-                rejected.append((key, f"quality lower bound {q_slb:.2f} < {workload.min_quality:.2f} (critical)"))
-                continue
+            if workload.critical:
+                # Critical gate uses a Hoeffding lower bound (a real confidence bound for a
+                # mean in [0,1]), not the exploration radius: with that radius, 25 straight
+                # 0.95 runs still bound at 0.23, so critical work could never be placed.
+                q_slb = mu - math.sqrt(hoeffding_log / (2 * n)) if n else 0.0
+                if q_slb < workload.min_quality:
+                    rejected.append((key, f"quality lower bound {q_slb:.2f} < {workload.min_quality:.2f} (critical)"))
+                    continue
 
             if st.ewma_cost_usd is not None:
                 cost = st.ewma_cost_usd
@@ -330,8 +319,7 @@ class ContextualProviderUCB:
 
         if not scored:
             return EngineDecision(None, None, None, "no feasible engine for this workload", tuple(rejected))
-        scored.sort(key=lambda t: (t[0], t[1]))  # key breaks ties deterministically
-        objective, key, arm = scored[0]
+        objective, key, arm = min(scored)  # unique arm key breaks ties deterministically
         return EngineDecision(
             selected_provider_id=arm.provider_id,
             selected_model_id=arm.model_id,
