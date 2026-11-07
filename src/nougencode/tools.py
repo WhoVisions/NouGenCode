@@ -1,5 +1,7 @@
 """Autonomous tools execution engine for NouGenCode agent."""
 
+import os
+import re
 import subprocess
 from pathlib import Path
 from typing import List
@@ -70,29 +72,48 @@ class ToolExecutor:
 
     def edit_file(self, file_path: str, old_str: str, new_str: str) -> str:
         """Surgically patch a contiguous block of text inside a target file."""
-        target = (self.root_dir / file_path).resolve()
-        if not target.exists() or not target.is_file():
-            return f"Error: File '{file_path}' does not exist or is not a file."
+        try:
+            target = self._resolve_workspace_path(file_path, "edit")
+        except ValueError as e:
+            return f"Error editing file: {e}"
+        if not target.exists():
+            return f"Error: File '{file_path}' does not exist."
+        if not target.is_file():
+            return f"Error: '{file_path}' is a directory."
         try:
             content = target.read_text(encoding="utf-8")
             if old_str not in content:
                 return f"Error: Target text not found in '{file_path}'."
             count = content.count(old_str)
             updated = content.replace(old_str, new_str, 1)
+
+            # Auto-heal or reject corrupt syntax for Python files
+            heal_notice = ""
+            if file_path.endswith(".py"):
+                from .fabric.syntax_guard import SyntaxHealer
+                res = SyntaxHealer.heal(updated, filename=file_path)
+                if res.was_corrupt:
+                    if res.repaired:
+                        updated = res.healed_code
+                        heal_notice = f" [Auto-healed syntax: {', '.join(res.repairs_applied)}]"
+                    else:
+                        return f"Error: SyntaxError prevented edit to {file_path}: {res.error}"
+
             target.write_text(updated, encoding="utf-8")
             self.context_gate.log_event(
                 f"edit_file:{file_path}",
                 f"Replaced 1 of {count} match(es)",
                 {"old_len": len(old_str), "new_len": len(new_str)},
             )
-            return f"Successfully patched '{file_path}' (1 replacement made)."
+            return f"Successfully patched '{file_path}' (1 replacement made).{heal_notice}"
         except Exception as e:
             return f"Error editing file: {e}"
 
     def run_bash(self, command: str) -> str:
         try:
+            cmd = ["powershell", "-Command", command] if os.name == "nt" else ["/bin/sh", "-c", command]
             res = subprocess.run(
-                ["powershell", "-Command", command],
+                cmd,
                 cwd=str(self.root_dir),
                 capture_output=True,
                 text=True,
@@ -111,7 +132,6 @@ class ToolExecutor:
 
     def grep_search(self, pattern: str, glob_pattern: str = "*.py") -> str:
         matches: List[str] = []
-        import re
         try:
             regex = re.compile(pattern, re.IGNORECASE)
             for path in self.root_dir.rglob(glob_pattern):
@@ -128,6 +148,7 @@ class ToolExecutor:
                     continue
                 if len(matches) >= 30:
                     break
-            return "\n".join(matches) if matches else "No matches found."
+            raw = "\n".join(matches) if matches else "No matches found."
+            return self.context_gate.clamp_for_llm(raw, max_lines=30, event_type=f"grep:{pattern[:30]}")
         except Exception as e:
             return f"Grep error: {e}"

@@ -5,15 +5,11 @@ Allows agents to safely incubate speculative ideas or hazardous refactors in iso
 git worktrees, measure test outcomes, and discard without contaminating main.
 """
 
-from __future__ import annotations
-
-import os
-import shutil
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 
 @dataclass
