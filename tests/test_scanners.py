@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from nougencode.scanners.ast_scanner import AstDeadCodeScanner
 from nougencode.scanners.orphan_scanner import OrphanFileScanner
+from nougencode.scanners.dep_scanner import DependencyScanner
 from nougencode.models import IssueType
 
 
@@ -90,3 +91,50 @@ def test_tool_executor_surgical_edit():
         res = executor.edit_file("sample.py", "return 'world'", "return 'nougen'")
         assert "Successfully patched" in res
         assert "return 'nougen'" in sample.read_text(encoding="utf-8")
+
+
+def test_dependency_scanner_requirements_txt():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        req = tmp_path / "requirements.txt"
+        req.write_text("pyyaml>=6.0\npytest\nunused-package==1.0.0\n", encoding="utf-8")
+
+        # Code only imports yaml and pytest
+        code = tmp_path / "main.py"
+        code.write_text("import yaml\nimport pytest\nprint(yaml.__file__)\n", encoding="utf-8")
+
+        scanner = DependencyScanner(tmp_path)
+        issues = scanner.scan_dependencies()
+
+        assert len(issues) == 1
+        assert issues[0].issue_type == IssueType.UNUSED_DEPENDENCY
+        assert issues[0].symbol_name == "unused_package"
+
+
+def test_dependency_scanner_pyproject_toml():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        toml = tmp_path / "pyproject.toml"
+        toml.write_text(
+            """[project]
+name = "demo-pkg"
+version = "0.1.0"
+dependencies = [
+    "pydantic-settings>=2.0",
+    "bloated-lib>=1.0"
+]
+""",
+            encoding="utf-8",
+        )
+
+        # Code only imports pydantic_settings
+        code = tmp_path / "main.py"
+        code.write_text("import pydantic_settings\n", encoding="utf-8")
+
+        scanner = DependencyScanner(tmp_path)
+        issues = scanner.scan_dependencies()
+
+        assert len(issues) == 1
+        assert issues[0].issue_type == IssueType.UNUSED_DEPENDENCY
+        assert issues[0].symbol_name == "bloated_lib"
+

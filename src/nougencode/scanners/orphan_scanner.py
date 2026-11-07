@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import List, Set
 
 from ..models import CodeIssue, IssueType
 
