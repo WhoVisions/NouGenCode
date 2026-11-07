@@ -120,24 +120,31 @@ class ElevationEngine:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(self.repo_root / "src")
         try:
-            res = subprocess.run(cmd, cwd=str(self.repo_root), env=env, capture_output=True, text=True, timeout=60)
+            res = subprocess.run(cmd, cwd=str(self.repo_root), env=env, capture_output=True, text=True, timeout=180)
             out = res.stdout + res.stderr
-            # Parse pytest summary e.g. "300 passed, 2 warnings in 16.55s" or "1 failed, 299 passed"
+            # Parse pytest summary e.g. "310 passed, 2 warnings in 16.55s" or "1 failed, 309 passed"
             passed = 0
             failed = 0
-            for part in out.splitlines()[-1].split(","):
-                part_strip = part.strip()
-                if "passed" in part_strip:
-                    try:
-                        passed = int(part_strip.split()[0])
-                    except (ValueError, IndexError):
-                        pass
-                elif "failed" in part_strip:
-                    try:
-                        failed = int(part_strip.split()[0])
-                    except (ValueError, IndexError):
-                        pass
+            for line in reversed(out.splitlines()):
+                line_strip = line.strip()
+                if "passed" in line_strip or "failed" in line_strip:
+                    for part in line_strip.split(","):
+                        part_strip = part.strip()
+                        if "passed" in part_strip:
+                            try:
+                                passed = int(part_strip.split()[0])
+                            except (ValueError, IndexError):
+                                pass
+                        elif "failed" in part_strip:
+                            try:
+                                failed = int(part_strip.split()[0])
+                            except (ValueError, IndexError):
+                                pass
+                    if passed > 0 or failed > 0:
+                        break
             total = passed + failed
+            if res.returncode != 0 and total == 0:
+                return 0, 0, 1
             return total, passed, failed
         except Exception:
             return 0, 0, 1
