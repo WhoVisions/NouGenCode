@@ -12,7 +12,7 @@ import hashlib
 import json
 from math import isfinite
 import threading
-from typing import Mapping, Sequence
+from typing import Mapping
 
 
 class MissionError(ValueError):

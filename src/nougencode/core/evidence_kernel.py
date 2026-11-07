@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from hashlib import sha256
-from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
+from typing import Any, FrozenSet, List, Mapping, Optional, Tuple
 
 
 class EvidenceState(str, Enum):

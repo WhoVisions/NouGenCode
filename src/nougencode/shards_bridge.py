@@ -10,7 +10,7 @@ import os
 import socket
 from pathlib import Path
 import sqlite3
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 NUM_DBS = 9
 

@@ -22,7 +22,7 @@ from enum import Enum
 import hashlib
 import json
 from math import isfinite
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional
 
 
 class MorphKind(str, Enum):

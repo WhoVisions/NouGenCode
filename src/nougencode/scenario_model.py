@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
-from typing import Callable, Sequence
+from typing import Sequence
 
 
 class ScenarioError(ValueError):
