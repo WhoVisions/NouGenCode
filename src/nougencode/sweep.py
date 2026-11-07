@@ -34,6 +34,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -78,7 +79,7 @@ def _nougen_cli() -> Optional[str]:
 
 def hydrate_context(topic: str = "repo hygiene dirty working tree", run: Runner = _run, cli: Optional[str] = None) -> ContextReport:
     """Steps 1-3 of NouGen Context Mode: lane, task-scoped shard recall, relay state."""
-    machine = os.environ.get("NOUGEN_MACHINE") or os.uname().nodename
+    machine = os.environ.get("NOUGEN_MACHINE") or (hasattr(os, "uname") and os.uname().nodename) or platform.node()
     cli = cli if cli is not None else _nougen_cli()
     sources: Dict[str, str] = {}
     if not cli:
