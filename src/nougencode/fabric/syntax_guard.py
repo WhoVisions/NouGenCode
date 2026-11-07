@@ -15,10 +15,9 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
 
-from .hook_abi import HookContext, HookPhase
+from .hook_abi import HookContext
 
 
 @dataclass
