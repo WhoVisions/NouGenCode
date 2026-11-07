@@ -76,6 +76,14 @@ def main() -> int:
     p_elev.add_argument("--apply", action="store_true", help="Apply auto-repairs to path leaks and unused imports")
     p_elev.add_argument("--no-persist", action="store_true", help="Skip persisting elevation telemetry to NouGen Shards")
 
+    p_bench = subparsers.add_parser(
+        "bench",
+        help="Execute deterministic verification benchmarks (UDCT polyglot, AST precision, surgical edit)",
+    )
+    p_bench.add_argument("--suite", choices=["udct", "ast", "edit", "all"], default="all", help="Benchmark suite to run (default: all)")
+    p_bench.add_argument("--json", action="store_true", help="Output benchmark scoreboard as JSON")
+    p_bench.add_argument("--no-persist", action="store_true", help="Skip persisting benchmark scoreboard to NouGen Shards")
+
     # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
@@ -116,6 +124,17 @@ def main() -> int:
         else:
             print(report.to_markdown())
         return 0 if report.is_healthy else 1
+
+    if args.subcommand == "bench":
+        from .bench import BenchmarkEngine, BenchmarkSuite
+        engine = BenchmarkEngine()
+        suite_enum = BenchmarkSuite(args.suite)
+        report = engine.run_benchmarks(suite=suite_enum, persist=not args.no_persist)
+        if args.json:
+            print(json.dumps(report.to_dict(), indent=2))
+        else:
+            print(report.to_markdown())
+        return 0 if report.failed_benchmarks == 0 else 1
 
     if args.subcommand == "sweep":
         from . import sweep as sw
