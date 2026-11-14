@@ -24,3 +24,8 @@ nougencode = ["schemas/*.json"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
