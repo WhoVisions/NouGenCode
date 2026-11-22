@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .. import lanes
+
 
 @dataclass
 class HardwareProfile:
@@ -89,29 +91,47 @@ class WaterflowDiscovery:
     def discover_providers(cls) -> Dict[str, ProviderCapability]:
         providers: Dict[str, ProviderCapability] = {}
 
-        # 1. Local Tier 0 Daemons (Ollama / LM Studio)
-        ollama_live = cls.check_daemon("127.0.0.1", 11434)
+        # 1. Local Tier 0 Daemons (Ollama / LM Studio). Hosts come from the
+        #    environment / NouGen mesh (OLLAMA_HOST, NOUGEN_OLLAMA_URL|PORT,
+        #    NOUGEN_LMSTUDIO_URL|PORT, mesh.json endpoints), loopback by default.
+        ollama_url = lanes.ollama_url()
+        ollama_live = cls.check_daemon(*lanes.split_host_port(ollama_url, 11434))
         providers["ollama"] = ProviderCapability(
             provider_id="ollama",
             name="Ollama Local Daemon",
             kind="local_daemon",
-            endpoint_url="http://127.0.0.1:11434",
+            endpoint_url=ollama_url,
             is_available=ollama_live,
             supported_roles=["BUILDER", "TESTER", "REPAIR"],
             cost_tier="zero_marginal",
             latency_profile="fast",
         )
 
-        lm_studio_live = cls.check_daemon("127.0.0.1", 1234)
+        lm_url = lanes.lmstudio_url()
+        lm_studio_live = cls.check_daemon(*lanes.split_host_port(lm_url, lanes.LMSTUDIO_DEFAULT_PORT))
         providers["lm_studio"] = ProviderCapability(
             provider_id="lm_studio",
             name="LM Studio Local Daemon",
             kind="local_daemon",
-            endpoint_url="http://127.0.0.1:1234",
+            endpoint_url=lm_url,
             is_available=lm_studio_live,
             supported_roles=["BUILDER", "CRITIC"],
             cost_tier="zero_marginal",
             latency_profile="fast",
+        )
+
+        # NouGenOpen: every free lane (OpenRouter, Hugging Face, NVIDIA, Arli AI,
+        # Ollama) behind one OpenAI-compatible endpoint, when Open is in the mesh.
+        open_url = lanes.open_url()
+        providers["nougen_open"] = ProviderCapability(
+            provider_id="nougen_open",
+            name="NouGenOpen Free Lanes",
+            kind="local_daemon",
+            endpoint_url=open_url,
+            is_available=bool(open_url) and cls.check_daemon(*lanes.split_host_port(open_url, 8765)),
+            supported_roles=["BUILDER", "TESTER", "REPAIR", "CRITIC"],
+            cost_tier="zero_marginal",
+            latency_profile="medium",
         )
 
         # 2. Local Coding CLIs

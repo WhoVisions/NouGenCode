@@ -33,14 +33,13 @@ import dataclasses as dc
 import datetime as dt
 import hashlib
 import os
-import platform
 import re
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
+from . import nougen_mesh, siblings
 from .security.invariants import ConcentricSecurityGate
 
 Runner = Callable[[Sequence[str], Optional[Path], float], Tuple[int, str]]
@@ -66,19 +65,13 @@ class ContextReport:
 
 
 def _nougen_cli() -> Optional[str]:
-    env = os.environ.get("NOUGEN_CLI")
-    if env and Path(env).exists():
-        return env
-    for base in (Path.home() / "The Observatory" / "NouGen" / "nougenshards", Path(__file__).resolve().parents[3] / "nougenshards"):
-        cand = base / ".venv" / "bin" / "nougen"
-        if cand.exists():
-            return str(cand)
-    return shutil.which("nougen")
+    """NOUGEN_CLI, then the NouGenShards checkout the mesh finds, then PATH."""
+    return siblings.nougen_cli()
 
 
 def hydrate_context(topic: str = "repo hygiene dirty working tree", run: Runner = _run, cli: Optional[str] = None) -> ContextReport:
     """Steps 1-3 of NouGen Context Mode: lane, task-scoped shard recall, relay state."""
-    machine = os.environ.get("NOUGEN_MACHINE") or (hasattr(os, "uname") and os.uname().nodename) or platform.node()
+    machine = nougen_mesh.machine()
     cli = cli if cli is not None else _nougen_cli()
     sources: Dict[str, str] = {}
     if not cli:

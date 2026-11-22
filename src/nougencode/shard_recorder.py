@@ -3,21 +3,22 @@
 import json
 from typing import Optional
 
+from . import nougen_mesh, siblings
 from .models import ScanSummary
 
 
 class ShardRecorder:
     """Interacts with NouGen shards to save code audits, deadcode scans, and bloat receipts."""
 
-    def __init__(self, agent_id: str = "antigravity") -> None:
-        self.agent_id = agent_id
+    def __init__(self, agent_id: Optional[str] = None) -> None:
+        self.agent_id = agent_id or nougen_mesh.agent()
 
     def record_scan_receipt(self, summary: ScanSummary) -> Optional[str]:
         """Creates a shard payload for the scan."""
         try:
-            # Try importing nougen_shards if available in environment
-            from nougen_shards import core
-            from nougen_shards.models import ShardPayload
+            # NouGenShards installed, or its checkout found through the mesh
+            core = siblings.import_shards("nougen_shards.core")
+            ShardPayload = siblings.import_shards("nougen_shards.models").ShardPayload
 
             content = (
                 f"# NouGenCode Dead Code & Bloat Audit\n\n"

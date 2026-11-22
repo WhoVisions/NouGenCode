@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+from nougencode import lanes
 from nougencode.fabric.change_contract import ChangeContract
 from nougencode.fabric.context_broker import CoherenceReport, ContextBroker
 from nougencode.fabric.hook_abi import HookABIAdapter, HookPhase
@@ -92,10 +93,12 @@ class ChangeFabricEngine:
         )
 
         # 5. Route selection
-        # Register a default local arm if none exists
+        # Register default arms if none exist: the local runtime and NouGenOpen's
+        # free lanes. Models come from NOUGEN_CODE_MODEL / NOUGEN_CODE_OPEN_MODEL
+        # or mesh.json models; unset means "whatever that lane picks".
         if not self.provider_ucb._arms:
-            self.provider_ucb.register_arm("local_ollama", "solai:latest", is_local=True)
-            self.provider_ucb.register_arm("openrouter", "deepseek-coder", is_local=False)
+            self.provider_ucb.register_arm("local_ollama", lanes.local_model() or "auto", is_local=True)
+            self.provider_ucb.register_arm("nougen_open", lanes.open_model(), is_local=False)
 
         route = self.provider_ucb.select_route(task_complexity="medium")
 
