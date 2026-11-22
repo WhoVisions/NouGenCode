@@ -242,7 +242,8 @@ class ElevationEngine:
 
         # 2. Try durable NouGen Shards capture
         try:
-            from nougen_shards.core import capture
+            from .siblings import import_shards
+            capture = import_shards("nougen_shards.core").capture
             return capture(
                 event_type="nougencode_elevation",
                 title="NouGenCode 24/7 Autonomous Elevation Audit",

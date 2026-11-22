@@ -45,7 +45,7 @@ class ReplSession:
         welcome_md = (
             f"# ⚡ NouGenCode (Interactive Terminal Agent)\n\n"
             f"* **Directory**: `{self.root_dir}`\n"
-            f"* **Model**: `{self.runner.model_name}` (Ollama Local)\n"
+            f"* **Model**: {self.runner.describe()}\n"
             f"* **Context Guard**: `ENFORCED (99% Rule)` -> `~/.nougen/context/session.db`\n"
             f"* **Memory Substrate**: `NouGenShards 9-DB Grid` -> `~/.nougen/shards`\n"
             f"* **Skills Loaded**: `{len(self.skill_registry.skills)} skills discovered`\n"

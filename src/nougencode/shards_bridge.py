@@ -1,49 +1,55 @@
 """Direct filesystem bridge to the canonical 9-DB NouGenShards memory substrate.
 
 Provides native zero-overhead FTS5 search, canonical locator parsing (node:db#id),
-and auto-discovery of the user's canonical shards grid across Outpost and ~/.nougen.
+and auto-discovery of the user's canonical shards grid under the NouGen runtime home.
 """
 
 from __future__ import annotations
 
 import os
-import socket
 from pathlib import Path
 import sqlite3
 from typing import Any, Dict, List, Optional
+
+from . import nougen_mesh
 
 NUM_DBS = 9
 
 
 def detect_node_name() -> str:
-    """Resolves the current machine locator name dynamically."""
-    for var in ("NOUGEN_NODE", "NOUGEN_NODE_NAME", "NOUGEN_MACHINE"):
-        val = os.environ.get(var, "").strip()
-        if val:
-            return val
-    try:
-        return socket.gethostname().split(".")[0] or "unknown"
-    except Exception:
-        return "unknown"
+    """This box's locator name: NOUGEN_NODE, then the mesh node, then the mesh machine name."""
+    val = os.environ.get("NOUGEN_NODE", "").strip()
+    if val:
+        return val
+    node = nougen_mesh.node()
+    return node if node != "standalone" else nougen_mesh.machine()
+
+
+def _is_vault(p: Path) -> bool:
+    return p.is_dir() and any((p / f"nougen_shards_{i}.db").exists() for i in range(1, NUM_DBS + 1))
 
 
 def resolve_canonical_shards_dir() -> Path:
     """Discovers and hooks into the user's canonical 9-DB NouGenShards grid.
 
     Priority order:
-    1. Explicit NOUGEN_VAULT_DIR or NOUGEN_SHARDS_DIR environment variable
-    2. Canonical authority: ~/.nougen/shards (C:\\Users\\super\\.nougen\\shards)
-    3. User profile .nougen/shards fallback
-    4. Repo-adjacent .vault fallback (if allowed)
+    1. Explicit NOUGEN_VAULT_DIR environment variable
+    2. NOUGEN_SHARDS_DIR, only when it holds shard DBs (in the NouGen mesh that
+       variable names the NouGenShards checkout, not the vault)
+    3. Canonical authority: <NOUGEN_ROOT or ~/.nougen>/shards
+    4. User profile .nougen/shards fallback
     """
-    explicit = os.environ.get("NOUGEN_VAULT_DIR") or os.environ.get("NOUGEN_SHARDS_DIR")
+    explicit = os.environ.get("NOUGEN_VAULT_DIR")
     if explicit:
         p = Path(explicit).expanduser().resolve()
         if p.is_dir():
             return p
+    legacy = os.environ.get("NOUGEN_SHARDS_DIR")
+    if legacy and _is_vault(Path(legacy).expanduser().resolve()):
+        return Path(legacy).expanduser().resolve()
 
     # Canonical persistent local authority
-    canonical = (Path.home() / ".nougen" / "shards").resolve()
+    canonical = (nougen_mesh.home() / "shards").resolve()
     if canonical.is_dir():
         return canonical
 

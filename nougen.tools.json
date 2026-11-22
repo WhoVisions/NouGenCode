@@ -1,0 +1,282 @@
+{
+ "mesh_version": "1",
+ "repo": "code",
+ "schema": "nougen-tools/1",
+ "tools": [
+  {
+   "args": {
+    "properties": {
+     "path": {
+      "description": "file or directory to scan",
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "scan",
+    "{path}",
+    "--json"
+   ],
+   "description": "AST dead code, orphan script and dependency bloat scan of a path; prints a JSON summary.",
+   "name": "scan",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {},
+    "required": [],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "discover",
+    "--json"
+   ],
+   "description": "Waterflow discovery: hardware, local runtimes, coding CLIs and NouGenOpen; prints JSON.",
+   "name": "discover",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "target": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "target"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "audit",
+    "{target}"
+   ],
+   "description": "Concentric security gate over a file or directory (secrets, personal paths); exit 1 lists violations.",
+   "name": "audit",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "role": {
+      "description": "architect, builder, critic, tester or security",
+      "type": "string"
+     }
+    },
+    "required": [
+     "role"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "route",
+    "--role",
+    "{role}"
+   ],
+   "description": "Preview which provider the empirical posterior picks for a role.",
+   "name": "route",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "repo_path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "repo_path"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "git-state",
+    "{repo_path}",
+    "--json"
+   ],
+   "description": "Tri-state working-tree check of a repo; prints JSON (exit 1 dirty, 3 unknown).",
+   "name": "git_state",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "profile_path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "profile_path"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "capability-profile",
+    "validate",
+    "{profile_path}"
+   ],
+   "description": "Validate a scheduler capability profile JSON file; prints its current scheduler view as JSON.",
+   "name": "capability_profile",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "request_path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_path"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "golden-slice",
+    "{request_path}"
+   ],
+   "description": "Assess a provenance-carrying golden-slice request JSON file; prints the proof envelope as JSON.",
+   "name": "golden_slice",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "contract_id": {
+      "type": "string"
+     },
+     "lines": {
+      "type": "integer"
+     },
+     "session_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "session_id",
+     "contract_id",
+     "lines"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "change-fabric",
+    "--session-id",
+    "{session_id}",
+    "--contract-id",
+    "{contract_id}",
+    "--lines",
+    "{lines}",
+    "--json"
+   ],
+   "description": "Validate a change contract and run one change-fabric cycle; prints JSON (status, receipt, route).",
+   "name": "change_fabric",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "root": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "root"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "sweep",
+    "{root}",
+    "--json",
+    "--no-persist"
+   ],
+   "description": "Context Mode gate, read-only dirty-repo inventory and skills recursion under a root; prints JSON, writes nothing.",
+   "name": "sweep",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "root": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "root"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "cleanup",
+    "{root}",
+    "--json"
+   ],
+   "description": "Report-only cleanup pass ranking files by repair priority, redundancy and risk; prints JSON.",
+   "name": "cleanup",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "root": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "root"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "elevate",
+    "{root}",
+    "--json",
+    "--no-persist"
+   ],
+   "description": "Hardening and elevation audit of a repo (tests, invariants, dead code), no repairs, no shard write; prints JSON.",
+   "name": "elevate",
+   "transport": "cli"
+  },
+  {
+   "args": {
+    "properties": {
+     "suite": {
+      "description": "udct, ast, edit or all",
+      "type": "string"
+     }
+    },
+    "required": [
+     "suite"
+    ],
+    "type": "object"
+   },
+   "argv": [
+    "nougencode",
+    "bench",
+    "--suite",
+    "{suite}",
+    "--json",
+    "--no-persist"
+   ],
+   "description": "Deterministic verification benchmarks (udct, ast, edit or all), no shard write; prints JSON.",
+   "name": "bench",
+   "transport": "cli"
+  }
+ ]
+}

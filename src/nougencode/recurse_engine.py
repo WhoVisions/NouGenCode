@@ -13,26 +13,37 @@ from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional
 
+from . import nougen_mesh, siblings
 from .context_gate import ContextGate
 
 
 def resolve_edge_path() -> Optional[Path]:
-    """Dynamically resolves the local edge-Ai directory if available."""
-    env_p = os.environ.get("EDGE_AI_DIR") or os.environ.get("YUKI_AI_DIR")
-    if env_p and Path(env_p).is_dir():
-        return Path(env_p).resolve()
+    """The edge-Ai tools checkout: EDGE_AI_DIR (or YUKI_AI_DIR), else mesh.json ``paths.edge_ai``.
 
-    home = Path.home()
-    candidates = [
-        home / "HQ_WhoArt" / "Outpost" / "Yuki-Ai",
-        home / "Outpost" / "Yuki-Ai",
-        home / "HQ_WhoArt" / "Outpost" / "edge-Ai",
-        home / "Outpost" / "edge-Ai",
-    ]
-    for c in candidates:
-        if c.is_dir():
-            return c.resolve()
+    No home-directory guesses: a box without either has no edge source.
+    """
+    env_p = os.environ.get("EDGE_AI_DIR") or os.environ.get("YUKI_AI_DIR")
+    if env_p and Path(env_p).expanduser().is_dir():
+        return Path(env_p).expanduser().resolve()
+    paths = nougen_mesh.load().get("paths")
+    cfg = paths.get("edge_ai") if isinstance(paths, dict) else None
+    if cfg and Path(str(cfg)).expanduser().is_dir():
+        return Path(str(cfg)).expanduser().resolve()
     return None
+
+
+def scrub_private_names(code: str, names: Optional[List[str]] = None) -> str:
+    """Replace private LAN IPs and this mesh's node/machine names before code is shared.
+
+    The names come from the NouGen mesh (mesh.json nodes, fleet_hosts.json,
+    this box's identity), never from a list printed in code.
+    """
+    out = re.sub(r"192\.168\.\d+\.\d+", "127.0.0.1", code)
+    names = siblings.known_node_names() if names is None else names
+    if names:
+        pattern = r"\b(" + "|".join(re.escape(n) for n in names) + r")\b"
+        out = re.sub(pattern, "NodeWorker", out, flags=re.IGNORECASE)
+    return out
 
 
 class RecurseEngine:
@@ -88,9 +99,8 @@ class RecurseEngine:
         src_path = Path(tool_info["path"])
         code = src_path.read_text(encoding="utf-8", errors="replace")
 
-        # Sanitize internal machine and brand references
-        sanitized_code = re.sub(r"192\.168\.\d+\.\d+", "127.0.0.1", code)
-        sanitized_code = re.sub(r"\b(WhoArt|Hyperion|blade|phoebus)\b", "NodeWorker", sanitized_code)
+        # Sanitize private IPs and this mesh's node / machine names
+        sanitized_code = scrub_private_names(code)
 
         skill_slug = target_skill_name or f"edge-{tool_name.replace('_', '-')}"
         skill_dir = self.dest_skills / skill_slug

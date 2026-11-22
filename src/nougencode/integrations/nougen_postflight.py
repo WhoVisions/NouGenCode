@@ -10,6 +10,7 @@ import subprocess
 import sys
 from typing import Any, Dict
 
+from nougencode import siblings
 from nougencode.core.checkpoint import MissionCheckpoint
 
 
@@ -17,7 +18,7 @@ _RELAY_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
 
 
 def _load_shards_core():
-    """Use the installed Shards package or a deployment-selected source tree."""
+    """Use a deployment-selected source tree, the installed Shards package, or the mesh's checkout."""
     source = os.environ.get("NOUGEN_SHARDS_SOURCE", "").strip()
     if source:
         root = Path(source).expanduser().resolve()
@@ -27,7 +28,8 @@ def _load_shards_core():
                 break
         else:
             raise ImportError("NOUGEN_SHARDS_SOURCE does not contain nougen_shards")
-    return importlib.import_module("nougen_shards.core")
+        return importlib.import_module("nougen_shards.core")
+    return siblings.import_shards("nougen_shards.core")
 
 
 def _capture_shard(checkpoint: MissionCheckpoint) -> str:
@@ -56,10 +58,9 @@ def _checkpoint_relay(checkpoint: MissionCheckpoint) -> str:
     if not _RELAY_ID.fullmatch(leg_id):
         raise ValueError("relay leg id contains unsupported characters")
 
-    relay_dir = os.environ.get("NOUGEN_RELAY_DIR", "").strip()
-    if not relay_dir:
+    relay_root = siblings.relay_dir()
+    if relay_root is None:
         return "relay:unknown_unconfigured"
-    relay_root = Path(relay_dir).expanduser().resolve()
     if not relay_root.is_dir():
         return "relay:unknown_unreachable"
 

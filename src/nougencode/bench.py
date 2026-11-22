@@ -283,7 +283,8 @@ class BenchmarkEngine:
         )
         try:
             import json
-            from nougen_shards.core import capture
+            from .siblings import import_shards
+            capture = import_shards("nougen_shards.core").capture
             return capture(
                 event_type="nougencode_benchmark",
                 title=f"NouGenCode Benchmark Scoreboard: {report.pass_rate:.1%}",

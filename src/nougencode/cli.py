@@ -84,6 +84,18 @@ def main() -> int:
     p_bench.add_argument("--json", action="store_true", help="Output benchmark scoreboard as JSON")
     p_bench.add_argument("--no-persist", action="store_true", help="Skip persisting benchmark scoreboard to NouGen Shards")
 
+    # scan subcommand: the default scan with an explicit path. A bare path as
+    # the first argument is taken for a subcommand name by argparse, so
+    # `nougencode <path>` only works for the default "."; `nougencode scan <path>`
+    # works for any path.
+    p_scan = subparsers.add_parser("scan", help="AST dead code, orphan and dependency scan of a path (the default command)")
+    p_scan.add_argument("scan_path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
+    p_scan.add_argument("--save-shard", action="store_true", help="Record scan receipt into NouGen shards")
+    p_scan.add_argument("--no-ast", action="store_true", help="Skip AST deadcode scanner")
+    p_scan.add_argument("--no-orphans", action="store_true", help="Skip orphan root script scanner")
+    p_scan.add_argument("--no-deps", action="store_true", help="Skip dependency scanner")
+    p_scan.add_argument("--json", action="store_true", help="Output summary as JSON")
+
     # Default scan flags
     parser.add_argument("path", nargs="?", default=".", help="Target directory or file to scan (default: current directory)")
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive autonomous terminal session")
@@ -294,6 +306,8 @@ def main() -> int:
             print(f"  Mutation Valid: {result.mutation_valid}")
         return 0 if result.status == "ACCEPTED" else 1
 
+    if args.subcommand == "scan":
+        args.path = args.scan_path
     target_path = Path(args.path).resolve()
 
     if not target_path.exists():

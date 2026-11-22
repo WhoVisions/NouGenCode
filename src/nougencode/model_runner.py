@@ -1,47 +1,44 @@
-"""Local model runner for NouGenCode using Ollama or Cloud API."""
+"""Model runner for NouGenCode: NouGenOpen through the mesh, local Ollama as fallback."""
 
-import json
 import os
-from typing import Any, Dict, List, Optional
-import urllib.request
-import urllib.error
+from typing import Dict, List, Optional
+
+from . import lanes
 
 
 class ModelRunner:
-    """Invokes local Ollama models (e.g. gemma2, llama3, qwen) or falls back smoothly."""
+    """Chats through NouGenOpen's free lanes when Open is installed, else a local Ollama model.
 
-    def __init__(self, model_name: str = "Yukiai:e2b", host: str = "http://localhost:11434") -> None:
-        self.model_name = os.environ.get("NOUGEN_MODEL") or model_name
-        self.host = os.environ.get("OLLAMA_HOST") or host
+    ``model_name`` is the local model (NOUGEN_MODEL / NOUGEN_CODE_MODEL / mesh
+    models.code); None means the first model local Ollama has pulled.
+    """
+
+    def __init__(self, model_name: Optional[str] = None, host: Optional[str] = None) -> None:
+        self.model_name = os.environ.get("NOUGEN_MODEL") or model_name or lanes.local_model()
+        self.host = lanes.normalize_host(os.environ["OLLAMA_HOST"], 11434) if os.environ.get("OLLAMA_HOST") \
+            else (host or lanes.ollama_url())
+        self.last_lane: Optional[str] = None
+        self.last_model: Optional[str] = None
+
+    def describe(self) -> str:
+        """One line for banners: which lane chat will try first."""
+        local = self.model_name or "first pulled model"
+        if lanes.open_url() or lanes.open_tool_installed():
+            return f"NouGenOpen ({lanes.open_model()}), fallback Ollama ({local})"
+        return f"Ollama Local ({local})"
 
     def is_available(self) -> bool:
-        try:
-            req = urllib.request.Request(f"{self.host}/api/tags")
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                return resp.status == 200
-        except Exception:
-            return False
+        base = lanes.open_url()
+        if base and lanes.answers(f"{base}/v1/models"):
+            return True
+        return lanes.answers(f"{self.host}/api/tags")
 
     def chat(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> str:
-        payload: Dict[str, Any] = {
-            "model": self.model_name,
-            "messages": messages,
-            "stream": False,
-        }
-        if system_prompt:
-            payload["messages"] = [{"role": "system", "content": system_prompt}] + messages
-
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            f"{self.host}/api/chat",
-            data=data,
-            headers={"Content-Type": "application/json"},
-        )
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                return result.get("message", {}).get("content", "")
-        except urllib.error.URLError as e:
-            return f"(Ollama connection error: {e}. Is Ollama running on {self.host}?)"
+            out = lanes.chat(messages, system_prompt, local_model_name=self.model_name, ollama_host=self.host)
+        except lanes.LaneError as e:
+            return f"(No model lane answered: {e}. Start `nougen-open serve`, or run Ollama on {self.host}.)"
         except Exception as e:
             return f"(Error: {e})"
+        self.last_lane, self.last_model = out["lane"], out["model"]
+        return out["content"]

@@ -6,7 +6,7 @@ of evidence never closes anything; an empty ledger is UNKNOWN, never VERIFIED. R
 ``EvidenceState`` from the evidence kernel (VERIFIED / UNKNOWN / FAILED).
 
 Source pattern: morluto/rea docs/reconstruction-obligation-ledgers.md (read via fleet shard
-31316 on blade, 2026-10-06). Not a port of REA code.
+31316, 2026-10-06). Not a port of REA code.
 """
 from __future__ import annotations
 

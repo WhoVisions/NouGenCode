@@ -197,6 +197,24 @@ the Context Gate resolves the current user's home directory at runtime and uses 
 NouGen context folder. NouGenCode does not embed a tenant, account, user folder,
 machine, or repository path.
 
+## NouGen mesh
+
+NouGenCode runs alone; installed beside other NouGen repos it finds them through
+the NouGen mesh (`src/nougencode/nougen_mesh.py`, a byte-identical copy of
+NouGenShards' `mesh.py`). Every value resolves from the environment, then
+`~/.nougen/mesh.json` (or `$NOUGEN_ROOT/mesh.json`), then the box itself:
+
+- NouGenShards / NouGenRelay checkouts: `NOUGEN_SHARDS_DIR`, `NOUGEN_RELAY_DIR`,
+  `repos.shards` / `repos.relay` in mesh.json, or a sibling checkout.
+- Model calls go to NouGenOpen first (its `/v1/chat/completions` when
+  `nougen-open serve` is up, else its `open.nougen_ask` tool), then local Ollama.
+  Models: `NOUGEN_CODE_OPEN_MODEL` / `models.code_open` (default
+  `nougenopen/auto`) and `NOUGEN_CODE_MODEL` / `models.code` (default: the first
+  model Ollama has pulled). `NOUGEN_CODE_VIA_OPEN=0` skips Open.
+- Hosts: `OLLAMA_HOST` or `NOUGEN_OLLAMA_URL` / `_PORT`, `NOUGEN_LMSTUDIO_URL` / `_PORT`.
+- `nougen.tools.json` lists the CLI commands as `code.<tool>` for other repos
+  (`nougen call code.scan path=src`); they need `nougencode` on PATH (`pip install -e .`).
+
 ## Cleanup pass
 
 `nougencode cleanup [root] [--top N] [--weights w.json] [--include-tests] [--json]` scores each
@@ -226,8 +244,8 @@ with a JSON file via `--weights` or `NOUGENCODE_CLEANUP_WEIGHTS`; unknown keys a
 The existing scanner CLI remains available:
 
     nougencode
-    nougencode ./path/to/project
-    nougencode ./scripts/worker.py
+    nougencode scan ./path/to/project
+    nougencode scan ./scripts/worker.py
     nougencode --json
     nougencode --save-shard
     nougencode --no-deps
